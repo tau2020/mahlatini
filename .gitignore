@@ -1,0 +1,16 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# HTTrack cache
+hts-cache/
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Logs
+hts-log.txt

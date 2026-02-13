@@ -1,0 +1,6 @@
+# HTTrack Website Copier Cookie File
+# This file format is compatible with Netscape cookies
+www.mahlatini.com	TRUE	/	FALSE	1999999999	CraftSessionId	5fhqj8cj931if6sdlo99mpugrg
+www.mahlatini.com	TRUE	/	FALSE	1999999999	currency	zar
+www.mahlatini.com	TRUE	/	FALSE	1999999999	CRAFT_CSRF_TOKEN	389b5c9e72d002e7b2a320f53e53ffa45ade0a6d661e3c17bdcf6983b7f38508a%3A2%3A%7Bi%3A0%3Bs%3A16%3A%22CRAFT_CSRF_TOKEN%22%3Bi%3A1%3Bs%3A40%3A%22_zHXAgvpPPfW8TIEj69yZrnyHAR8UJ6uDPUj4Q5c%22%3B%7D
+
