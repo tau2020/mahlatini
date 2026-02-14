@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Enquiry Form - Mahlatini Travel</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Georgia', 'Times New Roman', serif;
+      background: #f7f5f2;
+      color: #2d2d2d;
+    }
+    header {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 20px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 {
+      font-size: 28px;
+      font-weight: 300;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+    }
+    header nav a {
+      color: #ccc;
+      text-decoration: none;
+      margin-left: 24px;
+      font-size: 14px;
+      letter-spacing: 1px;
+    }
+    header nav a:hover { color: #d4a853; }
+    .hero {
+      background: linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)),
+        url('build/images/content/homepage/7-Night-South-Luangwa-Fly-In-Safari.jpg') center/cover no-repeat;
+      min-height: 300px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: #fff;
+      padding: 40px;
+    }
+    .hero h2 {
+      font-size: 42px;
+      font-weight: 300;
+      letter-spacing: 2px;
+      margin-bottom: 10px;
+    }
+    .hero p {
+      font-size: 18px;
+      opacity: 0.9;
+      max-width: 600px;
+    }
+    .form-container {
+      max-width: 720px;
+      margin: -40px auto 60px;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+      padding: 48px;
+      position: relative;
+      z-index: 1;
+    }
+    .form-container h3 {
+      font-size: 24px;
+      font-weight: 400;
+      margin-bottom: 8px;
+      color: #1a1a2e;
+    }
+    .form-container .subtitle {
+      color: #888;
+      margin-bottom: 32px;
+      font-size: 15px;
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+    .form-row.full { grid-template-columns: 1fr; }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #555;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 15px;
+      font-family: inherit;
+      color: #333;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #d4a853;
+    }
+    textarea { resize: vertical; min-height: 100px; }
+    .honeypot { position: absolute; left: -9999px; }
+    .submit-btn {
+      display: block;
+      width: 100%;
+      padding: 16px;
+      background: #d4a853;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-top: 10px;
+    }
+    .submit-btn:hover { background: #b8913e; }
+    .submit-btn:disabled { background: #ccc; cursor: wait; }
+    .success-msg {
+      display: none;
+      background: #d4edda;
+      color: #155724;
+      padding: 16px;
+      border-radius: 4px;
+      margin-top: 16px;
+      text-align: center;
+    }
+    .error-msg {
+      display: none;
+      background: #f8d7da;
+      color: #721c24;
+      padding: 16px;
+      border-radius: 4px;
+      margin-top: 16px;
+      text-align: center;
+    }
+    footer {
+      background: #1a1a2e;
+      color: #999;
+      text-align: center;
+      padding: 30px;
+      font-size: 13px;
+    }
+    .pipeline-info {
+      max-width: 720px;
+      margin: 0 auto 40px;
+      background: #e8f4fd;
+      border: 1px solid #bee5eb;
+      border-radius: 8px;
+      padding: 24px;
+      font-family: sans-serif;
+      font-size: 14px;
+      color: #0c5460;
+    }
+    .pipeline-info h4 { margin-bottom: 12px; font-size: 16px; }
+    .pipeline-info code { background: #d1ecf1; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Mahlatini</h1>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="best-safari-destinations.html">Destinations</a>
+    <a href="contact.html">Contact</a>
+    <a href="test-enquiry.html" style="color: #d4a853;">Enquiry</a>
+  </nav>
+</header>
+
+<div class="hero">
+  <div>
+    <h2>Plan Your Safari</h2>
+    <p>Tell us about your dream African adventure and our experts will craft a bespoke itinerary for you.</p>
+  </div>
+</div>
+
+<div class="form-container">
+  <h3>Travel Enquiry</h3>
+  <p class="subtitle">Fill in the details below and we'll get back to you within 24 hours.</p>
+
+  <form data-mahlatini-enquiry>
+    <div class="form-row">
+      <div>
+        <label for="name">Full Name *</label>
+        <input type="text" id="name" name="name" required placeholder="e.g. Sarah Johnson">
+      </div>
+      <div>
+        <label for="email">Email Address *</label>
+        <input type="email" id="email" name="email" required placeholder="e.g. sarah@example.com">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div>
+        <label for="phone">Phone Number</label>
+        <input type="tel" id="phone" name="phone" placeholder="e.g. +44 7700 900000">
+      </div>
+      <div>
+        <label for="destination">Destination</label>
+        <select id="destination" name="destination">
+          <option value="">Select a destination...</option>
+          <option value="Tanzania">Tanzania</option>
+          <option value="Kenya">Kenya</option>
+          <option value="South Africa">South Africa</option>
+          <option value="Botswana">Botswana</option>
+          <option value="Namibia">Namibia</option>
+          <option value="Rwanda">Rwanda</option>
+          <option value="Uganda">Uganda</option>
+          <option value="Zimbabwe">Zimbabwe</option>
+          <option value="Zambia">Zambia</option>
+          <option value="Mozambique">Mozambique</option>
+          <option value="Madagascar">Madagascar</option>
+          <option value="Multiple">Multiple Destinations</option>
+          <option value="Not sure">Not sure yet</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div>
+        <label for="travel_dates">Preferred Travel Dates</label>
+        <input type="text" id="travel_dates" name="travel_dates" placeholder="e.g. August 2026">
+      </div>
+      <div>
+        <label for="duration">Duration (nights)</label>
+        <input type="text" id="duration" name="duration" placeholder="e.g. 10 nights">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div>
+        <label for="adults">Adults</label>
+        <select id="adults" name="adults">
+          <option value="1">1</option>
+          <option value="2" selected>2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6+">6+</option>
+        </select>
+      </div>
+      <div>
+        <label for="children">Children</label>
+        <select id="children" name="children">
+          <option value="0" selected>0</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4+</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div>
+        <label for="budget">Budget Range</label>
+        <select id="budget" name="budget">
+          <option value="">Select...</option>
+          <option value="Under £5,000">Under £5,000</option>
+          <option value="£5,000 - £10,000">£5,000 - £10,000</option>
+          <option value="£10,000 - £20,000">£10,000 - £20,000</option>
+          <option value="£20,000 - £30,000">£20,000 - £30,000</option>
+          <option value="£30,000+">£30,000+</option>
+        </select>
+      </div>
+      <div>
+        <label for="experience_type">Experience Type</label>
+        <select id="experience_type" name="experience_type">
+          <option value="">Select...</option>
+          <option value="Safari">Safari</option>
+          <option value="Safari & Beach">Safari & Beach</option>
+          <option value="Honeymoon">Honeymoon</option>
+          <option value="Family Safari">Family Safari</option>
+          <option value="Adventure">Adventure</option>
+          <option value="Luxury">Luxury</option>
+          <option value="Photography">Photography Safari</option>
+          <option value="Gorilla Trekking">Gorilla Trekking</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row full">
+      <div>
+        <label for="message">Your Message *</label>
+        <textarea id="message" name="message" required placeholder="Tell us about your dream trip - any special requirements, occasions, or must-see experiences..."></textarea>
+      </div>
+    </div>
+
+    <!-- Honeypot -->
+    <div class="honeypot">
+      <input type="text" name="_hp_field" tabindex="-1" autocomplete="off">
+    </div>
+
+    <button type="submit" class="submit-btn">Submit Enquiry</button>
+
+    <div class="success-msg" data-mahlatini-success>
+      Thank you! Your enquiry has been received. Our safari specialists will be in touch within 24 hours.
+    </div>
+    <div class="error-msg" data-mahlatini-error></div>
+  </form>
+</div>
+
+<div class="pipeline-info">
+  <h4>Live Pipeline Test Info</h4>
+  <p>Submitting this form triggers the full automation pipeline:</p>
+  <p style="margin-top:8px">
+    <code>Form</code> &rarr; <code>n8n Webhook</code> &rarr; <code>Validate</code> &rarr; <code>Spam Filter</code> &rarr;
+    <code>Outlook Draft</code> &rarr; <code>Gemini Classify</code> &rarr; <code>Apply Category</code> &rarr;
+    <code>Send Email</code> &rarr; <code>Postgres Log</code>
+  </p>
+  <p style="margin-top:8px">Emails will be sent to <strong>mark@thevortextrader.com</strong>. Check the inbox after submitting.</p>
+</div>
+
+<footer>
+  &copy; 2026 Mahlatini Travel &mdash; Live Pipeline Test
+</footer>
+
+<script src="/enquiry-form.js"
+        data-webhook-url="http://localhost:5678/webhook/website-enquiry"
+        defer></script>
+
+</body>
+</html>
