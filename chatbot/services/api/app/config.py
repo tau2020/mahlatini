@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     n8n_webhook_high_value: str = "/webhook/high-value-lead"
     n8n_webhook_escalation: str = "/webhook/escalation"
     n8n_webhook_booking_update: str = "/webhook/booking-update"
+    n8n_webhook_website_enquiry: str = "/webhook/website-enquiry"
+    n8n_webhook_secret: str = ""
 
     # Jira
     jira_base_url: str = ""

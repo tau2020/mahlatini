@@ -95,3 +95,12 @@ async def serve_widget_css():
     if css_path.exists():
         return FileResponse(css_path, media_type="text/css")
     return {"error": "Widget styles not found"}
+
+
+@router.get("/widget/enquiry-form.js")
+async def serve_enquiry_form_js():
+    """Serve the enquiry form submission handler JavaScript."""
+    js_path = WIDGET_DIR / "enquiry-form.js"
+    if js_path.exists():
+        return FileResponse(js_path, media_type="application/javascript")
+    return {"error": "Enquiry form widget not found"}

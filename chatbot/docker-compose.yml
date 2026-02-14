@@ -113,10 +113,42 @@ services:
     ports:
       - "5678:5678"
     environment:
+      # Auth
       N8N_BASIC_AUTH_ACTIVE: "true"
       N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
       N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-changeme}
-      WEBHOOK_URL: http://n8n:5678/
+      # Webhook URL — the external URL that n8n uses for webhook registration
+      WEBHOOK_URL: ${N8N_EXTERNAL_URL:-http://n8n:5678}/
+      # Editor/OAuth callback base URL (must be browser-reachable)
+      N8N_EDITOR_BASE_URL: ${N8N_EXTERNAL_URL:-http://localhost:5678}/
+      # Encryption for stored credentials
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-change-me-encryption-key}
+      # Execution settings
+      EXECUTIONS_TIMEOUT: "120"
+      EXECUTIONS_TIMEOUT_MAX: "300"
+      N8N_PAYLOAD_SIZE_MAX: "16"
+      GENERIC_TIMEZONE: Europe/London
+      N8N_METRICS: "true"
+      # Allow Code nodes and expressions to access environment variables
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      # Pass-through for workflow Code nodes
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:-}
+      OUTLOOK_TENANT_ID: ${OUTLOOK_TENANT_ID:-}
+      OUTLOOK_CLIENT_ID: ${OUTLOOK_CLIENT_ID:-}
+      OUTLOOK_CLIENT_SECRET: ${OUTLOOK_CLIENT_SECRET:-}
+      OUTLOOK_MAILBOX: ${OUTLOOK_MAILBOX:-reservations@mahlatini.com}
+      # Database connection for n8n Code/Postgres nodes
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-mahlatini_chatbot}
+      POSTGRES_USER: ${POSTGRES_USER:-mahlatini}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_db_password}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - backend

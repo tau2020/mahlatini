@@ -1,16 +1,75 @@
-# OS files
+# ==========================
+# OS
+# ==========================
 .DS_Store
 Thumbs.db
+Desktop.ini
 
-# HTTrack cache
-hts-cache/
-
-# Editor files
+# ==========================
+# Editors / IDEs
+# ==========================
 *.swp
 *.swo
 *~
 .vscode/
 .idea/
+*.iml
 
-# Logs
+# ==========================
+# HTTrack (website mirror)
+# ==========================
+hts-cache/
 hts-log.txt
+
+# ==========================
+# Environment & Secrets
+# ==========================
+chatbot/.env
+!chatbot/.env.example
+
+# ==========================
+# Python
+# ==========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+.venv/
+venv/
+env/
+*.whl
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# ==========================
+# Node / n8n
+# ==========================
+node_modules/
+
+# ==========================
+# Docker
+# ==========================
+chatbot/data/
+chatbot/postgres_data/
+chatbot/redis_data/
+chatbot/qdrant_storage/
+chatbot/n8n_data/
+chatbot/ollama_data/
+
+# ==========================
+# Logs
+# ==========================
+*.log
+logs/
+
+# ==========================
+# Test / temp files
+# ==========================
+www.mahlatini.com/test-enquiry.html
+www.mahlatini.com/enquiry-form.js
+/tmp/
