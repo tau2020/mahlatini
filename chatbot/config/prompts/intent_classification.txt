@@ -1,0 +1,18 @@
+Classify the user's latest message in the context of a luxury travel concierge conversation.
+Return ONLY valid JSON with no additional text.
+
+{{
+  "primary_intent": "one of: general_enquiry, destination_info, pricing_question, itinerary_request, booking_intent, lodge_info, travel_logistics, complaint, review_share, callback_request, brochure_request, off_topic",
+  "urgency": "one of: low, medium, high, critical",
+  "urgency_reason": "string or null — explain if high/critical, e.g. 'Travel date within 7 days'",
+  "booking_stage": "one of: browsing, considering, ready_to_book, booked_followup",
+  "sentiment": "one of: positive, neutral, negative",
+  "requires_human": "boolean — true if bot cannot adequately handle this",
+  "escalation_reason": "string or null — explain if requires_human is true",
+  "detected_keywords": "array of relevant keywords from the message"
+}}
+
+LATEST MESSAGE: {message}
+
+RECENT CONVERSATION CONTEXT (last 3 messages):
+{recent_context}

@@ -1,0 +1,153 @@
+services:
+  # ─── Reverse Proxy ───────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - frontend
+      - backend
+
+  # ─── FastAPI Backend ─────────────────────────────────────
+  api:
+    build:
+      context: ./services/api
+      dockerfile: Dockerfile
+    env_file: .env
+    volumes:
+      - ./services/api/app:/app/app
+      - ./config/prompts:/app/prompts:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - backend
+
+  # ─── Qdrant Vector Database ─────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:latest
+    volumes:
+      - qdrant_data:/qdrant/storage
+      - qdrant_snapshots:/qdrant/snapshots
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/localhost/6333'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - backend
+
+  # ─── PostgreSQL ──────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mahlatini_chatbot}
+      POSTGRES_USER: ${POSTGRES_USER:-mahlatini}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_db_password}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mahlatini}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - backend
+
+  # ─── Redis ───────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - backend
+
+  # ─── n8n Workflow Engine ─────────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    volumes:
+      - n8n_data:/home/node/.n8n
+    ports:
+      - "5678:5678"
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-changeme}
+      WEBHOOK_URL: http://n8n:5678/
+    restart: unless-stopped
+    networks:
+      - backend
+
+  # ─── Knowledge Crawler (on-demand) ──────────────────────
+  crawler:
+    build:
+      context: ./services/crawler
+      dockerfile: Dockerfile
+    env_file: .env
+    volumes:
+      - ../www.mahlatini.com:/data/website:ro
+      - crawler_cache:/app/cache
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    profiles:
+      - tools
+    networks:
+      - backend
+
+volumes:
+  pg_data:
+  redis_data:
+  qdrant_data:
+  qdrant_snapshots:
+  n8n_data:
+  crawler_cache:
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge

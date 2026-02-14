@@ -1,0 +1,33 @@
+Analyse the following conversation between a travel concierge and a potential client.
+Extract any booking or travel details the user has mentioned.
+
+Return ONLY valid JSON with no additional text. If a field has not been mentioned, use null.
+
+{{
+  "destination": "string or null — country or specific region",
+  "destination_region": "string or null — specific area like 'Okavango Delta' or 'Maasai Mara'",
+  "travel_dates": {{
+    "start": "YYYY-MM-DD or null",
+    "end": "YYYY-MM-DD or null"
+  }},
+  "travel_month": "string or null — if only month mentioned, e.g. 'June 2026'",
+  "duration_days": "integer or null",
+  "num_adults": "integer or null",
+  "num_children": "integer or null",
+  "children_ages": "[integer] or null",
+  "budget_range": {{
+    "min": "number or null",
+    "max": "number or null",
+    "currency": "'GBP' or 'USD' or 'ZAR' or 'EUR' or null"
+  }},
+  "experience_type": "array of: 'safari', 'beach', 'honeymoon', 'family', 'adventure', 'culture', 'gorilla_trekking', 'rail', 'island', 'self_drive', 'walking_safari', 'marine' — or null",
+  "accommodation_preference": "string or null — e.g. 'luxury tented camp', '5-star hotel'",
+  "special_requests": "string or null — e.g. 'hot air balloon', 'anniversary celebration'",
+  "special_occasion": "string or null — e.g. 'honeymoon', 'anniversary', 'birthday'",
+  "contact_name": "string or null",
+  "contact_email": "string or null",
+  "contact_phone": "string or null"
+}}
+
+CONVERSATION:
+{conversation}

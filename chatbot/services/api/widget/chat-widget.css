@@ -1,0 +1,507 @@
+/* ============================================
+   Mahlatini Chat Widget
+   Premium luxury travel concierge chat interface
+   ============================================ */
+
+:root {
+  --mah-primary: #1a3a2a;
+  --mah-primary-light: #2a5a3a;
+  --mah-accent: #c8a45e;
+  --mah-accent-light: #d4b87a;
+  --mah-bg: #fafaf8;
+  --mah-surface: #ffffff;
+  --mah-text: #1a1a1a;
+  --mah-text-light: #6b6b6b;
+  --mah-border: #e8e4df;
+  --mah-user-bubble: #1a3a2a;
+  --mah-bot-bubble: #f5f3ef;
+  --mah-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --mah-shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.18);
+  --mah-radius: 16px;
+  --mah-font:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* ─── Trigger Button ─────────────────────────────────── */
+
+.mah-chat-trigger {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(
+    135deg,
+    var(--mah-primary) 0%,
+    var(--mah-primary-light) 100%
+  );
+  border: none;
+  cursor: pointer;
+  box-shadow: var(--mah-shadow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 99999;
+  animation: mah-pulse 3s infinite;
+}
+
+.mah-chat-trigger:hover {
+  transform: scale(1.08);
+  box-shadow: var(--mah-shadow-hover);
+}
+
+.mah-chat-trigger svg {
+  width: 28px;
+  height: 28px;
+  fill: white;
+  transition: transform 0.3s ease;
+}
+
+.mah-chat-trigger.mah-open svg {
+  transform: rotate(90deg) scale(0.9);
+}
+
+@keyframes mah-pulse {
+  0%,
+  100% {
+    box-shadow: var(--mah-shadow);
+  }
+  50% {
+    box-shadow: 0 8px 32px rgba(26, 58, 42, 0.35);
+  }
+}
+
+/* ─── Chat Container ─────────────────────────────────── */
+
+.mah-chat-container {
+  position: fixed;
+  bottom: 100px;
+  right: 24px;
+  width: 400px;
+  max-width: calc(100vw - 48px);
+  height: 580px;
+  max-height: calc(100vh - 140px);
+  border-radius: var(--mah-radius);
+  background: var(--mah-bg);
+  box-shadow: var(--mah-shadow-hover);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 99998;
+  font-family: var(--mah-font);
+  opacity: 0;
+  transform: translateY(20px) scale(0.95);
+  pointer-events: none;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid var(--mah-border);
+}
+
+.mah-chat-container.mah-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+/* ─── Header ─────────────────────────────────────────── */
+
+.mah-chat-header {
+  background: linear-gradient(
+    135deg,
+    var(--mah-primary) 0%,
+    var(--mah-primary-light) 100%
+  );
+  color: white;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.mah-chat-header-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.mah-chat-header-info {
+  flex: 1;
+}
+
+.mah-chat-header-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.mah-chat-header-status {
+  font-size: 12px;
+  opacity: 0.85;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.mah-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4ade80;
+  display: inline-block;
+  animation: mah-dot-pulse 2s infinite;
+}
+
+@keyframes mah-dot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.mah-chat-header-close {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  font-size: 18px;
+}
+
+.mah-chat-header-close:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* ─── Messages Area ──────────────────────────────────── */
+
+.mah-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--mah-border) transparent;
+}
+
+.mah-chat-messages::-webkit-scrollbar {
+  width: 5px;
+}
+.mah-chat-messages::-webkit-scrollbar-thumb {
+  background: var(--mah-border);
+  border-radius: 3px;
+}
+
+/* ─── Message Bubbles ────────────────────────────────── */
+
+.mah-message {
+  display: flex;
+  gap: 8px;
+  max-width: 88%;
+  animation: mah-msg-in 0.3s ease-out;
+}
+
+@keyframes mah-msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mah-message-user {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.mah-message-bot {
+  align-self: flex-start;
+}
+
+.mah-message-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.mah-message-bot .mah-message-avatar {
+  background: var(--mah-primary);
+  color: white;
+}
+
+.mah-message-bubble {
+  padding: 12px 16px;
+  border-radius: 14px;
+  line-height: 1.5;
+  font-size: 14px;
+  word-wrap: break-word;
+}
+
+.mah-message-user .mah-message-bubble {
+  background: var(--mah-user-bubble);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.mah-message-bot .mah-message-bubble {
+  background: var(--mah-bot-bubble);
+  color: var(--mah-text);
+  border-bottom-left-radius: 4px;
+  border: 1px solid var(--mah-border);
+}
+
+/* ─── Typing Indicator ───────────────────────────────── */
+
+.mah-typing {
+  display: flex;
+  gap: 4px;
+  padding: 12px 16px;
+  background: var(--mah-bot-bubble);
+  border-radius: 14px;
+  border-bottom-left-radius: 4px;
+  border: 1px solid var(--mah-border);
+  width: fit-content;
+  align-self: flex-start;
+}
+
+.mah-typing-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--mah-text-light);
+  border-radius: 50%;
+  animation: mah-typing-bounce 1.4s infinite ease-in-out;
+}
+
+.mah-typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.mah-typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes mah-typing-bounce {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.7);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ─── Input Area ─────────────────────────────────────── */
+
+.mah-chat-input-area {
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--mah-border);
+  background: var(--mah-surface);
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.mah-chat-input {
+  flex: 1;
+  border: 1px solid var(--mah-border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-family: var(--mah-font);
+  font-size: 14px;
+  resize: none;
+  outline: none;
+  max-height: 100px;
+  min-height: 40px;
+  line-height: 1.4;
+  transition: border-color 0.2s;
+  background: var(--mah-bg);
+  color: var(--mah-text);
+}
+
+.mah-chat-input:focus {
+  border-color: var(--mah-accent);
+}
+
+.mah-chat-input::placeholder {
+  color: var(--mah-text-light);
+}
+
+.mah-chat-send {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--mah-accent);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.mah-chat-send:hover {
+  background: var(--mah-accent-light);
+  transform: scale(1.05);
+}
+
+.mah-chat-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.mah-chat-send svg {
+  width: 18px;
+  height: 18px;
+  fill: white;
+}
+
+/* ─── Welcome Message ────────────────────────────────── */
+
+.mah-welcome {
+  text-align: center;
+  padding: 20px 24px;
+}
+
+.mah-welcome-icon {
+  font-size: 36px;
+  margin-bottom: 8px;
+}
+
+.mah-welcome-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--mah-text);
+  margin-bottom: 6px;
+}
+
+.mah-welcome-text {
+  font-size: 13px;
+  color: var(--mah-text-light);
+  line-height: 1.5;
+}
+
+/* ─── Quick Actions ──────────────────────────────────── */
+
+.mah-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 12px;
+}
+
+.mah-quick-btn {
+  padding: 7px 14px;
+  border: 1px solid var(--mah-border);
+  border-radius: 20px;
+  background: var(--mah-surface);
+  color: var(--mah-primary);
+  font-size: 12px;
+  font-family: var(--mah-font);
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.mah-quick-btn:hover {
+  background: var(--mah-primary);
+  color: white;
+  border-color: var(--mah-primary);
+}
+
+/* ─── Powered By ─────────────────────────────────────── */
+
+.mah-powered-by {
+  text-align: center;
+  padding: 6px;
+  font-size: 10px;
+  color: var(--mah-text-light);
+  background: var(--mah-surface);
+}
+
+/* ─── Responsive ─────────────────────────────────────── */
+
+@media (max-width: 480px) {
+  .mah-chat-container {
+    bottom: 0;
+    right: 0;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+
+  .mah-chat-trigger {
+    bottom: 16px;
+    right: 16px;
+    width: 56px;
+    height: 56px;
+  }
+}
+
+/* ─── Provider Toggle ──────────────────────────────── */
+.mah-provider-toggle {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.mah-provider-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.mah-provider-btn:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.mah-provider-btn.mah-provider-active {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: #c8a45e;
+  color: #fff;
+}
