@@ -2,8 +2,13 @@
 n8n Webhook Client
 ==================
 Sends structured payloads to n8n for workflow automation.
+Includes retry logic and HMAC signing for external webhook security.
 """
 
+import asyncio
+import hashlib
+import hmac
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -16,25 +21,56 @@ from app.models.schemas import BookingDetails, IntentClassification, LeadScore
 logger = logging.getLogger(__name__)
 
 TIMEOUT = httpx.Timeout(10.0, connect=5.0)
+MAX_RETRIES = 3
+RETRY_BACKOFF_BASE = 2  # seconds
 
 
-async def _send_webhook(path: str, payload: dict) -> bool:
-    """Send a POST request to an n8n webhook endpoint."""
+async def _send_webhook(path: str, payload: dict, retries: int = MAX_RETRIES) -> bool:
+    """Send a POST request to an n8n webhook endpoint with retry logic."""
     url = f"{settings.n8n_base_url}{path}"
-    try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            response = await client.post(url, json=payload)
-            if response.status_code in (200, 201, 204):
-                logger.info(f"Webhook sent successfully: {path}")
-                return True
+    for attempt in range(1, retries + 1):
+        try:
+            async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+                response = await client.post(url, json=payload)
+                if response.status_code in (200, 201, 204):
+                    logger.info(f"Webhook sent successfully: {path}")
+                    return True
+                elif response.status_code in (429, 500, 502, 503, 504) and attempt < retries:
+                    wait = RETRY_BACKOFF_BASE ** attempt
+                    logger.warning(
+                        f"Webhook {path} returned {response.status_code}, retrying in {wait}s "
+                        f"(attempt {attempt}/{retries})"
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                else:
+                    logger.warning(
+                        f"Webhook {path} returned {response.status_code}: {response.text[:200]}"
+                    )
+                    return False
+        except httpx.TimeoutException:
+            if attempt < retries:
+                wait = RETRY_BACKOFF_BASE ** attempt
+                logger.warning(f"Webhook {path} timed out, retrying in {wait}s (attempt {attempt}/{retries})")
+                await asyncio.sleep(wait)
             else:
-                logger.warning(
-                    f"Webhook {path} returned {response.status_code}: {response.text[:200]}"
-                )
+                logger.error(f"Webhook {path} timed out after {retries} attempts")
                 return False
-    except Exception as e:
-        logger.error(f"Webhook {path} failed: {e}")
-        return False
+        except Exception as e:
+            logger.error(f"Webhook {path} failed: {e}")
+            return False
+    return False
+
+
+def _sign_payload(payload: dict) -> str:
+    """Generate HMAC-SHA256 signature for a payload."""
+    secret = settings.n8n_webhook_secret
+    if not secret:
+        return ""
+    sig = hmac.new(
+        secret.encode(), json.dumps(payload, sort_keys=True).encode(), hashlib.sha256
+    ).hexdigest()
+    return f"sha256={sig}"
 
 
 async def send_new_enquiry(
@@ -152,3 +188,24 @@ async def send_booking_update(
     }
 
     return await _send_webhook(settings.n8n_webhook_booking_update, payload)
+
+
+async def forward_website_enquiry(form_data: dict, metadata: Optional[dict] = None) -> bool:
+    """Forward a website form enquiry directly to n8n for Outlook + Gemini processing.
+
+    Use this when the FastAPI backend receives a form submission that should
+    bypass the chatbot pipeline and go straight to the n8n automation workflow.
+    """
+    payload = {
+        "source": "website_form",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "form_data": form_data,
+        "metadata": metadata or {},
+    }
+
+    # Sign for webhook verification
+    sig = _sign_payload(payload)
+    if sig:
+        payload["hmac_signature"] = sig
+
+    return await _send_webhook(settings.n8n_webhook_website_enquiry, payload)

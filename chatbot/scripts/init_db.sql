@@ -95,6 +95,14 @@ CREATE TABLE IF NOT EXISTS analytics_events (
 CREATE INDEX idx_analytics_type ON analytics_events(event_type);
 CREATE INDEX idx_analytics_created ON analytics_events(created_at);
 
+-- Partial indexes for high-volume event types (n8n automation)
+CREATE INDEX idx_analytics_enquiry_classified
+    ON analytics_events (created_at DESC)
+    WHERE event_type = 'enquiry_classified';
+CREATE INDEX idx_analytics_n8n_errors
+    ON analytics_events (created_at DESC)
+    WHERE event_type = 'n8n_error';
+
 -- ─── Destinations (dimension table) ──────────────────────
 CREATE TABLE IF NOT EXISTS destinations (
     id      SERIAL PRIMARY KEY,
@@ -184,3 +192,31 @@ SELECT
 FROM leads
 GROUP BY DATE(created_at)
 ORDER BY metric_date DESC;
+
+-- ─── Gemini Classification Views ────────────────────────
+
+CREATE OR REPLACE VIEW v_enquiry_classifications AS
+SELECT
+    (payload->>'classification')::text AS gemini_classification,
+    (payload->>'destination')::text AS destination,
+    (payload->>'booking_stage')::text AS booking_stage,
+    (payload->>'urgency')::text AS urgency,
+    (payload->>'lead_score')::text AS lead_score,
+    (payload->>'source')::text AS source,
+    (payload->>'gemini_confidence')::float AS gemini_confidence,
+    created_at
+FROM analytics_events
+WHERE event_type = 'enquiry_classified'
+ORDER BY created_at DESC;
+
+CREATE OR REPLACE VIEW v_n8n_errors AS
+SELECT
+    (payload->>'severity')::text AS severity,
+    (payload->>'workflow_name')::text AS workflow_name,
+    (payload->>'node_name')::text AS node_name,
+    (payload->>'error_message')::text AS error_message,
+    (payload->>'execution_id')::text AS execution_id,
+    created_at
+FROM analytics_events
+WHERE event_type = 'n8n_error'
+ORDER BY created_at DESC;

@@ -1,0 +1,401 @@
+{
+  "id": "1HciZgndJ328cjvH",
+  "name": "Mahlatini: Error Handler",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// FORMAT ERROR \u2014 extract useful fields from the error event\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst error = $input.first().json;\n\nconst workflowName = error.workflow?.name || 'Unknown Workflow';\nconst nodeName = error.execution?.lastNodeExecuted || 'Unknown Node';\nconst errorMessage = error.execution?.error?.message || 'No error message';\nconst executionId = error.execution?.id || 'N/A';\nconst timestamp = new Date().toISOString();\n\n// Try to extract input data from the failed node (truncate to prevent overflow)\nlet inputSummary = 'N/A';\ntry {\n  const data = error.execution?.data;\n  if (data) {\n    inputSummary = JSON.stringify(data).substring(0, 2000);\n  }\n} catch (e) {\n  inputSummary = 'Could not serialise input data';\n}\n\n// Determine severity\nlet severity = 'WARNING';\nif (errorMessage.includes('SPAM_DETECTED')) {\n  severity = 'INFO';  // Spam is expected, don't alert\n} else if (errorMessage.includes('Validation failed')) {\n  severity = 'WARNING';\n} else {\n  severity = 'ERROR';\n}\n\nconst emailHtml = `\n<div style=\"font-family:monospace;max-width:640px\">\n  <h2 style=\"color:${severity === 'ERROR' ? '#c0392b' : severity === 'WARNING' ? '#e67e22' : '#7f8c8d'}\">n8n ${severity}: ${workflowName}</h2>\n  <table style=\"border-collapse:collapse;width:100%\">\n    <tr><td style=\"padding:6px;font-weight:bold;border-bottom:1px solid #ddd\">Workflow</td><td style=\"padding:6px;border-bottom:1px solid #ddd\">${workflowName}</td></tr>\n    <tr><td style=\"padding:6px;font-weight:bold;border-bottom:1px solid #ddd\">Failed Node</td><td style=\"padding:6px;border-bottom:1px solid #ddd\">${nodeName}</td></tr>\n    <tr><td style=\"padding:6px;font-weight:bold;border-bottom:1px solid #ddd\">Error</td><td style=\"padding:6px;border-bottom:1px solid #ddd;color:#c0392b\">${errorMessage}</td></tr>\n    <tr><td style=\"padding:6px;font-weight:bold;border-bottom:1px solid #ddd\">Execution ID</td><td style=\"padding:6px;border-bottom:1px solid #ddd\">${executionId}</td></tr>\n    <tr><td style=\"padding:6px;font-weight:bold;border-bottom:1px solid #ddd\">Timestamp</td><td style=\"padding:6px;border-bottom:1px solid #ddd\">${timestamp}</td></tr>\n  </table>\n  <details style=\"margin-top:12px\">\n    <summary>Input Data (truncated)</summary>\n    <pre style=\"background:#f4f4f4;padding:10px;font-size:11px;overflow:auto;max-height:300px\">${inputSummary}</pre>\n  </details>\n</div>`;\n\nreturn [{\n  json: {\n    severity,\n    workflowName,\n    nodeName,\n    errorMessage,\n    executionId,\n    timestamp,\n    inputSummary,\n    emailHtml,\n    emailSubject: `[n8n ${severity}] ${workflowName} \u2014 ${nodeName} failed`,\n    shouldAlert: severity === 'ERROR',  // Only email alerts for real errors\n    logPayload: {\n      severity,\n      workflow_name: workflowName,\n      node_name: nodeName,\n      error_message: errorMessage,\n      execution_id: executionId,\n    },\n  }\n}];\n"
+      },
+      "id": "format-error",
+      "name": "Format Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "should-alert",
+              "leftValue": "={{ $json.shouldAlert }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "should-alert",
+      "name": "Is Real Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        704,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/me/sendMail",
+        "authentication": "genericCredentialType",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ message: { subject: $json.emailSubject, body: { contentType: 'HTML', content: $json.emailHtml }, toRecipients: [{ emailAddress: { address: $env.OUTLOOK_MAILBOX || 'reservations@mahlatini.com' } }], importance: 'high', categories: ['IMMEDIATE'] }, saveToSentItems: false }) }}",
+        "options": {},
+        "genericAuthType": "oAuth2Api"
+      },
+      "id": "send-alert-email",
+      "name": "Outlook: Send Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        944,
+        224
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "oAuth2Api": {
+          "id": "wZWUkzbncn5Ti9dm",
+          "name": "Outlook Graph OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO analytics_events (event_type, payload, created_at)\nVALUES (\n  'n8n_error',\n  $1::jsonb,\n  NOW()\n)",
+        "options": {}
+      },
+      "id": "postgres-log-error",
+      "name": "Postgres: Log Error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        944,
+        432
+      ]
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error": {
+      "main": [
+        [
+          {
+            "node": "Is Real Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Real Error?": {
+      "main": [
+        [
+          {
+            "node": "Outlook: Send Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Postgres: Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Postgres: Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "activeVersionId": "24b38409-118f-4f02-b868-e03c3145ce5c",
+  "versionCounter": 19,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-02-14T18:27:00.791Z",
+      "createdAt": "2026-02-14T18:27:00.791Z",
+      "role": "workflow:owner",
+      "workflowId": "1HciZgndJ328cjvH",
+      "projectId": "om4pVmcHJX6Ic7Df",
+      "project": {
+        "updatedAt": "2026-02-14T18:25:42.835Z",
+        "createdAt": "2026-02-14T01:03:47.602Z",
+        "id": "om4pVmcHJX6Ic7Df",
+        "name": "Mahlatini Admin <admin@mahlatini.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "15c161a4-1e23-4320-8a24-a26a9570ef93",
+        "projectRelations": [
+          {
+            "updatedAt": "2026-02-14T01:03:47.602Z",
+            "createdAt": "2026-02-14T01:03:47.602Z",
+            "userId": "15c161a4-1e23-4320-8a24-a26a9570ef93",
+            "projectId": "om4pVmcHJX6Ic7Df",
+            "user": {
+              "updatedAt": "2026-02-14T22:30:30.013Z",
+              "createdAt": "2026-02-14T01:03:47.490Z",
+              "id": "15c161a4-1e23-4320-8a24-a26a9570ef93",
+              "email": "admin@mahlatini.com",
+              "firstName": "Mahlatini",
+              "lastName": "Admin",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2026-02-14T18:39:44.892Z",
+                "personalization_survey_n8n_version": "2.7.5",
+                "automationGoalDevops": [
+                  "ticketing-systems-integrations",
+                  "reporting"
+                ],
+                "companyType": "saas",
+                "role": "devops"
+              },
+              "settings": {
+                "userActivated": true,
+                "firstSuccessfulWorkflowId": "6g2SZsGNZiKpP01K",
+                "userActivatedAt": 1771108220019
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-02-14",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "parentFolder": null,
+  "activeVersion": {
+    "updatedAt": "2026-02-14T18:27:00.793Z",
+    "createdAt": "2026-02-14T18:27:00.793Z",
+    "versionId": "24b38409-118f-4f02-b868-e03c3145ce5c",
+    "workflowId": "1HciZgndJ328cjvH",
+    "nodes": [
+      {
+        "parameters": {},
+        "id": "error-trigger",
+        "name": "Error Trigger",
+        "type": "n8n-nodes-base.errorTrigger",
+        "typeVersion": 1,
+        "position": [
+          240,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// FORMAT ERROR \u2014 extract useful fields from the error event\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst error = $input.first().json;\n\nconst workflowName = error.workflow?.name || 'Unknown Workflow';\nconst nodeName = error.execution?.lastNodeExecuted || 'Unknown Node';\nconst errorMessage = error.execution?.error?.message || 'No error message';\nconst executionId = error.execution?.id || 'N/A';\nconst timestamp = new Date().toISOString();\n\n// Try to extract input data from the failed node (truncate to prevent overflow)\nlet inputSummary = 'N/A';\ntry {\n  const data = error.execution?.data;\n  if (data) {\n    inputSummary = JSON.stringify(data).substring(0, 2000);\n  }\n} catch (e) {\n  inputSummary = 'Could not serialise input data';\n}\n\n// Determine severity\nlet severity = 'WARNING';\nif (errorMessage.includes('SPAM_DETECTED')) {\n  severity = 'INFO';  // Spam is expected, don't alert\n} else if (errorMessage.includes('Validation failed')) {\n  severity = 'WARNING';\n} else {\n  severity = 'ERROR';\n}\n\nconst emailHtml = `\n<div style=\"font-family:monospace;max-width:640px\">\n  <h2 style=\"color:${severity === 'ERROR' ? '#c0392b' : severity === 'WARNING' ? '#e67e22' : '#7f8c8d'}\">n8n ${severity}: ${workflowName}</h2>\n  <table style=\"border-collapse:collapse;width:100%\">\n    <tr><td style=\"padding:6px;font-weight:bold;border-bottom:1px solid #ddd\">Workflow</td><td style=\"padding:6px;border-bottom:1px solid #ddd\">${workflowName}</td></tr>\n    <tr><td style=\"padding:6px;font-weight:bold;border-bottom:1px solid #ddd\">Failed Node</td><td style=\"padding:6px;border-bottom:1px solid #ddd\">${nodeName}</td></tr>\n    <tr><td style=\"padding:6px;font-weight:bold;border-bottom:1px solid #ddd\">Error</td><td style=\"padding:6px;border-bottom:1px solid #ddd;color:#c0392b\">${errorMessage}</td></tr>\n    <tr><td style=\"padding:6px;font-weight:bold;border-bottom:1px solid #ddd\">Execution ID</td><td style=\"padding:6px;border-bottom:1px solid #ddd\">${executionId}</td></tr>\n    <tr><td style=\"padding:6px;font-weight:bold;border-bottom:1px solid #ddd\">Timestamp</td><td style=\"padding:6px;border-bottom:1px solid #ddd\">${timestamp}</td></tr>\n  </table>\n  <details style=\"margin-top:12px\">\n    <summary>Input Data (truncated)</summary>\n    <pre style=\"background:#f4f4f4;padding:10px;font-size:11px;overflow:auto;max-height:300px\">${inputSummary}</pre>\n  </details>\n</div>`;\n\nreturn [{\n  json: {\n    severity,\n    workflowName,\n    nodeName,\n    errorMessage,\n    executionId,\n    timestamp,\n    inputSummary,\n    emailHtml,\n    emailSubject: `[n8n ${severity}] ${workflowName} \u2014 ${nodeName} failed`,\n    shouldAlert: severity === 'ERROR',  // Only email alerts for real errors\n    logPayload: {\n      severity,\n      workflow_name: workflowName,\n      node_name: nodeName,\n      error_message: errorMessage,\n      execution_id: executionId,\n    },\n  }\n}];\n"
+        },
+        "id": "format-error",
+        "name": "Format Error",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          480,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "should-alert",
+                "leftValue": "={{ $json.shouldAlert }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "id": "should-alert",
+        "name": "Is Real Error?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          700,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://graph.microsoft.com/v1.0/me/sendMail",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "microsoftOutlookOAuth2Api",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ message: { subject: $json.emailSubject, body: { contentType: 'HTML', content: $json.emailHtml }, toRecipients: [{ emailAddress: { address: $env.OUTLOOK_MAILBOX || 'reservations@mahlatini.com' } }], importance: 'high', categories: ['IMMEDIATE'] }, saveToSentItems: false }) }}",
+          "options": {}
+        },
+        "id": "send-alert-email",
+        "name": "Outlook: Send Alert",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          940,
+          220
+        ],
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 5000
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO analytics_events (event_type, payload, created_at)\nVALUES (\n  'n8n_error',\n  $1::jsonb,\n  NOW()\n)",
+          "options": {},
+          "queryParams": "={{ JSON.stringify($json.logPayload) }}"
+        },
+        "id": "postgres-log-error",
+        "name": "Postgres: Log Error",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          940,
+          420
+        ]
+      }
+    ],
+    "connections": {
+      "Error Trigger": {
+        "main": [
+          [
+            {
+              "node": "Format Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Format Error": {
+        "main": [
+          [
+            {
+              "node": "Is Real Error?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is Real Error?": {
+        "main": [
+          [
+            {
+              "node": "Outlook: Send Alert",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Postgres: Log Error",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Postgres: Log Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Mahlatini Admin",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-02-14T18:27:35.957Z",
+        "id": 2,
+        "workflowId": "1HciZgndJ328cjvH",
+        "versionId": "24b38409-118f-4f02-b868-e03c3145ce5c",
+        "event": "activated",
+        "userId": "15c161a4-1e23-4320-8a24-a26a9570ef93"
+      }
+    ]
+  },
+  "scopes": [
+    "workflow:create",
+    "workflow:delete",
+    "workflow:execute",
+    "workflow:execute-chat",
+    "workflow:list",
+    "workflow:move",
+    "workflow:publish",
+    "workflow:read",
+    "workflow:share",
+    "workflow:update"
+  ],
+  "checksum": "2852de43896a5a70e69843be32167537ad1ea7a079c2ed6a63ada221ac1f1c14"
+}

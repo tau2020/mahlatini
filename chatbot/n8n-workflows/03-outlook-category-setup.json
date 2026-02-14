@@ -1,0 +1,82 @@
+{
+  "name": "Mahlatini: Setup Outlook Categories (Run Once)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ═══════════════════════════════════════════════════════════\n// DEFINE CATEGORIES — Outlook colour presets for each priority\n//\n// Outlook preset colours:\n//   preset0 = Red, preset1 = Orange, preset2 = Brown,\n//   preset3 = Yellow, preset4 = Green, preset5 = Teal,\n//   preset6 = Olive, preset7 = Blue, preset8 = Purple,\n//   preset9 = Cranberry\n// ═══════════════════════════════════════════════════════════\nreturn [\n  { json: { displayName: 'IMMEDIATE', color: 'preset0' } },      // Red\n  { json: { displayName: 'IMPORTANT', color: 'preset3' } },      // Yellow\n  { json: { displayName: 'NOT_IMPORTANT', color: 'preset7' } },  // Blue\n];\n"
+      },
+      "id": "define-categories",
+      "name": "Define Categories",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/me/outlook/masterCategories",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftOutlookOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ displayName: $json.displayName, color: $json.color }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1000
+            }
+          }
+        }
+      },
+      "id": "create-category",
+      "name": "Outlook: Create Category",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ═══════════════════════════════════════════════════════════\n// REPORT — summarise what was created\n// ═══════════════════════════════════════════════════════════\nconst items = $input.all();\nconst results = items.map(item => ({\n  category: item.json.displayName || 'unknown',\n  status: item.json.error ? 'already exists or failed' : 'created',\n}));\n\nreturn [{ json: { message: 'Category setup complete', results } }];\n"
+      },
+      "id": "report",
+      "name": "Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 300]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [{ "node": "Define Categories", "type": "main", "index": 0 }]
+      ]
+    },
+    "Define Categories": {
+      "main": [
+        [{ "node": "Outlook: Create Category", "type": "main", "index": 0 }]
+      ]
+    },
+    "Outlook: Create Category": {
+      "main": [
+        [{ "node": "Report", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    { "name": "setup" },
+    { "name": "outlook" }
+  ]
+}
