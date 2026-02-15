@@ -28,7 +28,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "new-enquiry",
-        "responseMode": "lastNode",
+        "responseMode": "responseNode",
         "options": {}
       },
       "id": "webhook-chatbot",
@@ -235,7 +235,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: 'ok', classification: $json.geminiClassification, reason: $json.geminiReason, confidence: $json.geminiConfidence, outlook_message_id: $json.outlookMessageId }) }}",
+        "responseBody": "={{ JSON.stringify({ status: \"ok\", classification: $(\"Build Outlook Patch\").first().json.geminiClassification || \"UNKNOWN\", reason: $(\"Build Outlook Patch\").first().json.geminiReason || \"\", confidence: $(\"Build Outlook Patch\").first().json.geminiConfidence || 0, outlook_message_id: $(\"Capture Message ID\").first().json.outlookMessageId || \"\" }) }}",
         "options": {}
       },
       "id": "respond-webhook",
@@ -317,6 +317,51 @@
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 3000,
+      "credentials": {
+        "oAuth2Api": {
+          "id": "wZWUkzbncn5Ti9dm",
+          "name": "Outlook Graph OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// TO DO: BUILD TASK \u2014 map enquiry data \u2192 MS To Do API payload\n// Runs in parallel with Route + Postgres after email is sent.\n// Uses $('Build Outlook Patch').first().json for normalised data\n// (HTTP Request nodes replace $json with API response).\n//\n// API: POST /me/todo/lists/{listId}/tasks\n// Docs: https://learn.microsoft.com/en-us/graph/api/todotasklist-post-tasks\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst data = $('Build Outlook Patch').first().json;\nconst client = data.client || {};\nconst enquiry = data.enquiry || {};\nconst intelligence = data.intelligence || {};\nconst cls = data.geminiClassification || 'IMPORTANT';\n\n// --- Importance mapping: Gemini classification \u2192 To Do importance ---\n// To Do supports: low, normal, high\nconst importanceMap = {\n  'IMMEDIATE': 'high',\n  'IMPORTANT': 'normal',\n  'NOT_IMPORTANT': 'low',\n};\nconst importance = importanceMap[cls] || 'normal';\n\n// --- Task title ---\nconst destination = enquiry.destination || 'General';\nconst title = `[${cls}] ${client.name || 'Unknown'} \u2014 ${destination}`;\n\n// --- Description (plain text) ---\nconst descParts = [\n  `Name: ${client.name || 'N/A'}`,\n  `Email: ${client.email || 'N/A'}`,\n  `Phone: ${client.phone || 'Not provided'}`,\n  `Destination: ${destination}`,\n  `Travel Dates: ${enquiry.travel_dates || 'Flexible'}`,\n  `Duration: ${enquiry.duration || 'TBD'}`,\n  `Party: ${enquiry.adults || '?'} adults, ${enquiry.children || 0} children`,\n  `Budget: ${enquiry.budget || 'Not specified'}`,\n  `Experience: ${(enquiry.experience_type || []).join(', ') || 'Not specified'}`,\n  `Lead Score: ${intelligence.lead_score || 'N/A'}`,\n  `Booking Stage: ${intelligence.booking_stage || 'unknown'}`,\n  `Urgency: ${intelligence.urgency || 'unknown'}`,\n  `Classification: ${cls} (${data.geminiReason || 'N/A'})`,\n  `Source: ${data._source || 'unknown'}`,\n  '',\n  'Message:',\n  (enquiry.message || 'No message').substring(0, 1500),\n];\nconst description = descParts.join('\\n');\n\n// --- Due date: 3 business days from now for follow-up ---\nconst now = new Date();\nlet dueDate = new Date(now);\nlet addedDays = 0;\nwhile (addedDays < 3) {\n  dueDate.setDate(dueDate.getDate() + 1);\n  if (dueDate.getDay() !== 0 && dueDate.getDay() !== 6) addedDays++;\n}\n\n// --- Build the To Do task payload ---\nconst todoTask = {\n  title: title.substring(0, 255),\n  body: {\n    content: description,\n    contentType: 'text',\n  },\n  importance: importance,\n  status: 'notStarted',\n  dueDateTime: {\n    dateTime: dueDate.toISOString().replace('Z', ''),\n    timeZone: 'UTC',\n  },\n  categories: [cls],\n};\n\n// --- Build the API URL using the list ID from env ---\nconst listId = $env.TODO_LIST_ID;\nconst apiUrl = `https://graph.microsoft.com/v1.0/me/todo/lists/${listId}/tasks`;\n\nreturn [{\n  json: {\n    todoTask,\n    todoApiUrl: apiUrl,\n    todoMeta: {\n      clientEmail: client.email,\n      clientName: client.name,\n      classification: cls,\n      source: data._source,\n    },\n  }\n}];\n"
+      },
+      "id": "todo-build-task",
+      "name": "ToDo: Build Task",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2784,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.todoApiUrl }}",
+        "authentication": "genericCredentialType",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.todoTask) }}",
+        "options": {
+          "timeout": 15000
+        },
+        "genericAuthType": "oAuth2Api"
+      },
+      "id": "todo-create-task",
+      "name": "ToDo: Create Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3008,
+        640
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput",
       "credentials": {
         "oAuth2Api": {
           "id": "wZWUkzbncn5Ti9dm",
@@ -466,6 +511,11 @@
             "node": "Postgres: Log Classification",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "ToDo: Build Task",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -498,6 +548,28 @@
           }
         ]
       ]
+    },
+    "ToDo: Build Task": {
+      "main": [
+        [
+          {
+            "node": "ToDo: Create Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chatbot: Complete": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -507,11 +579,10 @@
     "errorWorkflow": "1HciZgndJ328cjvH",
     "availableInMCP": false
   },
-  "staticData": null,
   "meta": null,
   "pinData": {},
-  "activeVersionId": "ed88e81f-54b3-4896-9c6d-c755ad7425cd",
-  "versionCounter": 94,
+  "versionId": "6169f0d9-cc3a-44f4-ad5c-dd89d9605c3b",
+  "versionCounter": 129,
   "triggerCount": 2,
   "shared": [
     {
@@ -536,7 +607,7 @@
             "userId": "15c161a4-1e23-4320-8a24-a26a9570ef93",
             "projectId": "om4pVmcHJX6Ic7Df",
             "user": {
-              "updatedAt": "2026-02-14T22:30:30.013Z",
+              "updatedAt": "2026-02-15T19:17:41.000Z",
               "createdAt": "2026-02-14T01:03:47.490Z",
               "id": "15c161a4-1e23-4320-8a24-a26a9570ef93",
               "email": "admin@mahlatini.com",
@@ -560,7 +631,7 @@
               },
               "disabled": false,
               "mfaEnabled": false,
-              "lastActiveAt": "2026-02-14",
+              "lastActiveAt": "2026-02-15",
               "isPending": false
             }
           }
@@ -571,9 +642,9 @@
   "tags": [],
   "parentFolder": null,
   "activeVersion": {
-    "updatedAt": "2026-02-14T22:31:41.300Z",
-    "createdAt": "2026-02-14T22:31:41.300Z",
-    "versionId": "ed88e81f-54b3-4896-9c6d-c755ad7425cd",
+    "updatedAt": "2026-02-15T19:28:00.382Z",
+    "createdAt": "2026-02-15T19:28:00.382Z",
+    "versionId": "6169f0d9-cc3a-44f4-ad5c-dd89d9605c3b",
     "workflowId": "6g2SZsGNZiKpP01K",
     "nodes": [
       {
@@ -599,7 +670,7 @@
         "parameters": {
           "httpMethod": "POST",
           "path": "new-enquiry",
-          "responseMode": "lastNode",
+          "responseMode": "responseNode",
           "options": {}
         },
         "id": "webhook-chatbot",
@@ -806,7 +877,7 @@
       {
         "parameters": {
           "respondWith": "json",
-          "responseBody": "={{ JSON.stringify({ status: 'ok', classification: $json.geminiClassification, reason: $json.geminiReason, confidence: $json.geminiConfidence, outlook_message_id: $json.outlookMessageId }) }}",
+          "responseBody": "={{ JSON.stringify({ status: \"ok\", classification: $(\"Build Outlook Patch\").first().json.geminiClassification || \"UNKNOWN\", reason: $(\"Build Outlook Patch\").first().json.geminiReason || \"\", confidence: $(\"Build Outlook Patch\").first().json.geminiConfidence || 0, outlook_message_id: $(\"Capture Message ID\").first().json.outlookMessageId || \"\" }) }}",
           "options": {}
         },
         "id": "respond-webhook",
@@ -888,6 +959,51 @@
         "retryOnFail": true,
         "maxTries": 3,
         "waitBetweenTries": 3000,
+        "credentials": {
+          "oAuth2Api": {
+            "id": "wZWUkzbncn5Ti9dm",
+            "name": "Outlook Graph OAuth2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// TO DO: BUILD TASK \u2014 map enquiry data \u2192 MS To Do API payload\n// Runs in parallel with Route + Postgres after email is sent.\n// Uses $('Build Outlook Patch').first().json for normalised data\n// (HTTP Request nodes replace $json with API response).\n//\n// API: POST /me/todo/lists/{listId}/tasks\n// Docs: https://learn.microsoft.com/en-us/graph/api/todotasklist-post-tasks\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst data = $('Build Outlook Patch').first().json;\nconst client = data.client || {};\nconst enquiry = data.enquiry || {};\nconst intelligence = data.intelligence || {};\nconst cls = data.geminiClassification || 'IMPORTANT';\n\n// --- Importance mapping: Gemini classification \u2192 To Do importance ---\n// To Do supports: low, normal, high\nconst importanceMap = {\n  'IMMEDIATE': 'high',\n  'IMPORTANT': 'normal',\n  'NOT_IMPORTANT': 'low',\n};\nconst importance = importanceMap[cls] || 'normal';\n\n// --- Task title ---\nconst destination = enquiry.destination || 'General';\nconst title = `[${cls}] ${client.name || 'Unknown'} \u2014 ${destination}`;\n\n// --- Description (plain text) ---\nconst descParts = [\n  `Name: ${client.name || 'N/A'}`,\n  `Email: ${client.email || 'N/A'}`,\n  `Phone: ${client.phone || 'Not provided'}`,\n  `Destination: ${destination}`,\n  `Travel Dates: ${enquiry.travel_dates || 'Flexible'}`,\n  `Duration: ${enquiry.duration || 'TBD'}`,\n  `Party: ${enquiry.adults || '?'} adults, ${enquiry.children || 0} children`,\n  `Budget: ${enquiry.budget || 'Not specified'}`,\n  `Experience: ${(enquiry.experience_type || []).join(', ') || 'Not specified'}`,\n  `Lead Score: ${intelligence.lead_score || 'N/A'}`,\n  `Booking Stage: ${intelligence.booking_stage || 'unknown'}`,\n  `Urgency: ${intelligence.urgency || 'unknown'}`,\n  `Classification: ${cls} (${data.geminiReason || 'N/A'})`,\n  `Source: ${data._source || 'unknown'}`,\n  '',\n  'Message:',\n  (enquiry.message || 'No message').substring(0, 1500),\n];\nconst description = descParts.join('\\n');\n\n// --- Due date: 3 business days from now for follow-up ---\nconst now = new Date();\nlet dueDate = new Date(now);\nlet addedDays = 0;\nwhile (addedDays < 3) {\n  dueDate.setDate(dueDate.getDate() + 1);\n  if (dueDate.getDay() !== 0 && dueDate.getDay() !== 6) addedDays++;\n}\n\n// --- Build the To Do task payload ---\nconst todoTask = {\n  title: title.substring(0, 255),\n  body: {\n    content: description,\n    contentType: 'text',\n  },\n  importance: importance,\n  status: 'notStarted',\n  dueDateTime: {\n    dateTime: dueDate.toISOString().replace('Z', ''),\n    timeZone: 'UTC',\n  },\n  categories: [cls],\n};\n\n// --- Build the API URL using the list ID from env ---\nconst listId = $env.TODO_LIST_ID;\nconst apiUrl = `https://graph.microsoft.com/v1.0/me/todo/lists/${listId}/tasks`;\n\nreturn [{\n  json: {\n    todoTask,\n    todoApiUrl: apiUrl,\n    todoMeta: {\n      clientEmail: client.email,\n      clientName: client.name,\n      classification: cls,\n      source: data._source,\n    },\n  }\n}];\n"
+        },
+        "id": "todo-build-task",
+        "name": "ToDo: Build Task",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2784,
+          640
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $json.todoApiUrl }}",
+          "authentication": "genericCredentialType",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.todoTask) }}",
+          "options": {
+            "timeout": 15000
+          },
+          "genericAuthType": "oAuth2Api"
+        },
+        "id": "todo-create-task",
+        "name": "ToDo: Create Task",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3008,
+          640
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "onError": "continueRegularOutput",
         "credentials": {
           "oAuth2Api": {
             "id": "wZWUkzbncn5Ti9dm",
@@ -1037,6 +1153,11 @@
               "node": "Postgres: Log Classification",
               "type": "main",
               "index": 0
+            },
+            {
+              "node": "ToDo: Build Task",
+              "type": "main",
+              "index": 0
             }
           ]
         ]
@@ -1069,6 +1190,28 @@
             }
           ]
         ]
+      },
+      "ToDo: Build Task": {
+        "main": [
+          [
+            {
+              "node": "ToDo: Create Task",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Chatbot: Complete": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "authors": "Mahlatini Admin",
@@ -1077,10 +1220,10 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-02-14T22:31:42.452Z",
-        "id": 14,
+        "createdAt": "2026-02-15T19:28:31.918Z",
+        "id": 24,
         "workflowId": "6g2SZsGNZiKpP01K",
-        "versionId": "ed88e81f-54b3-4896-9c6d-c755ad7425cd",
+        "versionId": "6169f0d9-cc3a-44f4-ad5c-dd89d9605c3b",
         "event": "activated",
         "userId": "15c161a4-1e23-4320-8a24-a26a9570ef93"
       }
@@ -1098,5 +1241,5 @@
     "workflow:share",
     "workflow:update"
   ],
-  "checksum": "ff6462293c0f74d196785b8a0bc129f163633539f15ccfd1d3f75a09ce91f89a"
+  "checksum": "02c316bdabe663ee1c908410eaca3dde812353bb360b3c204c9ec5b15c77df5c"
 }

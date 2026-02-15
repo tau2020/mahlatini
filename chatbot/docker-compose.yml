@@ -139,6 +139,10 @@ services:
       OUTLOOK_CLIENT_ID: ${OUTLOOK_CLIENT_ID:-}
       OUTLOOK_CLIENT_SECRET: ${OUTLOOK_CLIENT_SECRET:-}
       OUTLOOK_MAILBOX: ${OUTLOOK_MAILBOX:-mark@thevortextrader.com}
+      # Microsoft To Do task list IDs
+      TODO_LIST_ID: ${TODO_LIST_ID:-}
+      TODO_LIST_INPROGRESS_ID: ${TODO_LIST_INPROGRESS_ID:-}
+      TODO_LIST_COMPLETED_ID: ${TODO_LIST_COMPLETED_ID:-}
       # Database connection for n8n Code/Postgres nodes
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
