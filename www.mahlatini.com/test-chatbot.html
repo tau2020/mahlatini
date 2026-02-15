@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chatbot Integration Test - Mahlatini Travel</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Georgia', 'Times New Roman', serif;
+      background: #f7f5f2;
+      color: #2d2d2d;
+    }
+    header {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 20px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 {
+      font-size: 28px;
+      font-weight: 300;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+    }
+    header nav a {
+      color: #ccc;
+      text-decoration: none;
+      margin-left: 24px;
+      font-size: 14px;
+      letter-spacing: 1px;
+    }
+    header nav a:hover { color: #d4a853; }
+    .hero {
+      background: linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)),
+        url('build/images/content/homepage/7-Night-South-Luangwa-Fly-In-Safari.jpg') center/cover no-repeat;
+      min-height: 350px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: #fff;
+      padding: 40px;
+    }
+    .hero h2 {
+      font-size: 42px;
+      font-weight: 300;
+      letter-spacing: 2px;
+      margin-bottom: 10px;
+    }
+    .hero p {
+      font-size: 18px;
+      opacity: 0.9;
+      max-width: 600px;
+    }
+    .content {
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    .test-panel {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      padding: 32px;
+      margin-bottom: 24px;
+    }
+    .test-panel h3 {
+      font-size: 20px;
+      font-weight: 500;
+      margin-bottom: 16px;
+      color: #1a1a2e;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .test-panel p {
+      font-size: 15px;
+      line-height: 1.7;
+      color: #555;
+      margin-bottom: 12px;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .status-ok { background: #d4edda; color: #155724; }
+    .status-info { background: #e8f4fd; color: #0c5460; }
+    .endpoint-list {
+      list-style: none;
+      padding: 0;
+    }
+    .endpoint-list li {
+      padding: 10px 16px;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      margin-bottom: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .method {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 700;
+      min-width: 50px;
+      text-align: center;
+    }
+    .method-post { background: #fef3cd; color: #856404; }
+    .method-get { background: #d4edda; color: #155724; }
+    .method-ws { background: #e2d5f1; color: #6f42c1; }
+    .test-samples {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 16px;
+    }
+    .sample-card {
+      background: #f8f9fa;
+      border: 1px solid #e9ecef;
+      border-radius: 6px;
+      padding: 16px;
+      cursor: pointer;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .sample-card:hover {
+      border-color: #d4a853;
+      box-shadow: 0 2px 8px rgba(212,168,83,0.15);
+    }
+    .sample-card h4 { font-size: 14px; margin-bottom: 4px; }
+    .sample-card p { font-size: 13px; color: #888; margin: 0; }
+    footer {
+      background: #1a1a2e;
+      color: #999;
+      text-align: center;
+      padding: 30px;
+      font-size: 13px;
+    }
+    .nav-links {
+      margin-top: 16px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .nav-links a {
+      display: inline-block;
+      padding: 8px 16px;
+      background: #f8f9fa;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      text-decoration: none;
+      color: #333;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+    .nav-links a:hover { background: #e9ecef; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Mahlatini</h1>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="best-safari-destinations.html">Destinations</a>
+    <a href="test-enquiry.html">Enquiry Form</a>
+    <a href="test-chatbot.html" style="color: #d4a853;">Chatbot Test</a>
+  </nav>
+</header>
+
+<div class="hero">
+  <div>
+    <h2>AI Travel Concierge</h2>
+    <p>Chat with our AI concierge about safaris, honeymoons, and luxury travel. Click the chat bubble in the bottom-right corner.</p>
+  </div>
+</div>
+
+<div class="content">
+
+  <div class="test-panel">
+    <h3>System Status</h3>
+    <p>
+      <span class="status-badge status-ok" id="api-status">Checking...</span>
+      <span class="status-badge status-info">Widget: WebSocket + REST fallback</span>
+    </p>
+    <p>The chat widget (bottom-right) connects via WebSocket to the API. If WebSocket fails, it automatically falls back to REST. Lead capture, intent classification, and n8n webhook forwarding are all active.</p>
+  </div>
+
+  <div class="test-panel">
+    <h3>API Endpoints</h3>
+    <ul class="endpoint-list">
+      <li><span class="method method-get">GET</span> /health &mdash; System health check</li>
+      <li><span class="method method-post">POST</span> /api/chat/message &mdash; REST chat (fallback)</li>
+      <li><span class="method method-ws">WS</span> /api/chat/ws/{session_id} &mdash; WebSocket chat</li>
+      <li><span class="method method-post">POST</span> /api/chat/n8n-callback &mdash; n8n push notifications (NEW)</li>
+      <li><span class="method method-get">GET</span> /api/chat/n8n-pending/{session_id} &mdash; Poll pending messages (NEW)</li>
+      <li><span class="method method-post">POST</span> /webhook/new-enquiry &mdash; Lead capture to n8n</li>
+      <li><span class="method method-post">POST</span> /webhook/website-enquiry &mdash; Form submission to n8n</li>
+    </ul>
+  </div>
+
+  <div class="test-panel">
+    <h3>Test the Chatbot</h3>
+    <p>Click the chat bubble in the bottom-right corner, or try these sample conversations:</p>
+    <div class="test-samples">
+      <div class="sample-card" onclick="triggerChat('What safari destinations do you recommend for a first-time visitor?')">
+        <h4>Safari Recommendation</h4>
+        <p>Tests RAG retrieval + destination knowledge</p>
+      </div>
+      <div class="sample-card" onclick="triggerChat('I want to book a honeymoon in the Maldives for 2 adults in June 2026, budget around 15000 GBP')">
+        <h4>Booking Intent (High Value)</h4>
+        <p>Tests lead scoring + n8n webhook trigger</p>
+      </div>
+      <div class="sample-card" onclick="triggerChat('I need to speak to someone urgently about my booking')">
+        <h4>Escalation Request</h4>
+        <p>Tests human handoff + escalation webhook</p>
+      </div>
+      <div class="sample-card" onclick="triggerChat('Tell me about Botswana safari lodges in the Okavango Delta')">
+        <h4>Detailed Destination Query</h4>
+        <p>Tests deep RAG retrieval + confidence scoring</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="test-panel">
+    <h3>Browse the Website</h3>
+    <p>Navigate to different pages to test the chatbot in context:</p>
+    <div class="nav-links">
+      <a href="index.html">Homepage</a>
+      <a href="best-safari-destinations.html">Destinations</a>
+      <a href="tanzania.html">Tanzania</a>
+      <a href="kenya.html">Kenya</a>
+      <a href="botswana.html">Botswana</a>
+      <a href="south-africa.html">South Africa</a>
+      <a href="namibia.html">Namibia</a>
+      <a href="maldives.html">Maldives</a>
+      <a href="test-enquiry.html">Enquiry Form</a>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  &copy; 2026 Mahlatini Travel &mdash; Chatbot Integration Test
+</footer>
+
+<!-- Mahlatini AI Chat Widget -->
+<script src="http://localhost/widget/chat-widget.js"
+        data-api-url="http://localhost"
+        data-provider="groq"
+        data-show-toggle="true"
+        defer></script>
+
+<script>
+  // Health check
+  fetch('http://localhost/health')
+    .then(r => r.json())
+    .then(data => {
+      const badge = document.getElementById('api-status');
+      if (data.status === 'healthy') {
+        badge.textContent = 'API: Healthy';
+        badge.className = 'status-badge status-ok';
+      } else {
+        badge.textContent = 'API: Degraded';
+        badge.className = 'status-badge';
+        badge.style.background = '#fef3cd';
+        badge.style.color = '#856404';
+      }
+    })
+    .catch(() => {
+      const badge = document.getElementById('api-status');
+      badge.textContent = 'API: Offline';
+      badge.style.background = '#f8d7da';
+      badge.style.color = '#721c24';
+    });
+
+  // Trigger chat from sample cards
+  function triggerChat(message) {
+    // Open the chat widget
+    const trigger = document.getElementById('mah-chat-trigger');
+    const container = document.getElementById('mah-chat-container');
+    if (trigger && container && !container.classList.contains('mah-visible')) {
+      trigger.click();
+    }
+    // Wait for widget to open, then type the message
+    setTimeout(() => {
+      const input = document.getElementById('mah-chat-input');
+      if (input) {
+        input.value = message;
+        input.dispatchEvent(new Event('input'));
+        // Auto-send after a brief pause
+        setTimeout(() => {
+          const sendBtn = document.getElementById('mah-chat-send');
+          if (sendBtn) sendBtn.click();
+        }, 300);
+      }
+    }, 500);
+  }
+</script>
+
+</body>
+</html>
