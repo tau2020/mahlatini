@@ -133,7 +133,7 @@ services:
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       # Pass-through for workflow Code nodes
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-4-5-20250929}
       N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:-}
       OUTLOOK_TENANT_ID: ${OUTLOOK_TENANT_ID:-}
       OUTLOOK_CLIENT_ID: ${OUTLOOK_CLIENT_ID:-}
