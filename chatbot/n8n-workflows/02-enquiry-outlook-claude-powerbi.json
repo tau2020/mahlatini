@@ -1,0 +1,1347 @@
+{
+  "data": {
+    "updatedAt": "2026-02-15T20:49:51.215Z",
+    "createdAt": "2026-02-14T18:27:00.400Z",
+    "id": "6g2SZsGNZiKpP01K",
+    "name": "Mahlatini: Enquiry \u2192 Outlook + Claude + Power BI",
+    "description": null,
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "website-enquiry",
+          "responseMode": "responseNode",
+          "options": {
+            "rawBody": true
+          }
+        },
+        "id": "webhook-trigger",
+        "name": "Webhook: Website Enquiry",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          240,
+          304
+        ],
+        "webhookId": "website-enquiry"
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "new-enquiry",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "webhook-chatbot",
+        "name": "Webhook: Chatbot Lead",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          240,
+          560
+        ],
+        "webhookId": "new-enquiry"
+      },
+      {
+        "parameters": {
+          "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// VALIDATE INPUT \u2014 checks required fields + timestamp\n// The webhook node wraps POST body inside $json.body\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst raw = $input.first().json;\nconst body = raw.body || raw; // unwrap webhook envelope\nconst errors = [];\n\n// --- Determine source ---\nconst isWebsiteForm = body.source === 'website_form';\nconst isChatbot = body.event_type === 'new_enquiry';\n\nif (!isWebsiteForm && !isChatbot) {\n  errors.push('Unknown source: expected website_form or chatbot new_enquiry');\n}\n\n// --- Required fields ---\nconst email = isWebsiteForm ? body.form_data?.email : body.client?.email;\nconst name  = isWebsiteForm ? body.form_data?.name  : body.client?.name;\n\nif (!email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {\n  errors.push('Invalid or missing email address');\n}\nif (!name || name.trim().length < 2) {\n  errors.push('Invalid or missing name (min 2 chars)');\n}\n\n// --- Timestamp freshness (website form only, 5 min window) ---\nif (isWebsiteForm && body.timestamp) {\n  const ts = new Date(body.timestamp);\n  const ageMs = Date.now() - ts.getTime();\n  if (isNaN(ts.getTime()) || ageMs > 300000 || ageMs < -60000) {\n    errors.push('Timestamp is missing, stale (>5 min), or in the future');\n  }\n}\n\nif (errors.length > 0) {\n  throw new Error('Validation failed: ' + errors.join('; '));\n}\n\nreturn [{ json: { ...body, _source: isWebsiteForm ? 'website' : 'chatbot' } }];\n"
+        },
+        "id": "validate-input",
+        "name": "Validate Input",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          512,
+          432
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// SPAM FILTER \u2014 honeypot, URL density, blocklist keywords\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst body = $input.first().json;\nconst formData = body.form_data || body.enquiry || {};\nconst message = formData.message || body.enquiry?.special_requests || body.conversation_summary || '';\n\n// 1. Honeypot check (hidden field that bots fill in)\nif (formData._hp_field) {\n  throw new Error('SPAM_DETECTED: Honeypot field populated');\n}\n\n// 2. Link density (more than 3 URLs = suspicious)\nconst urlCount = (message.match(/https?:\\/\\//gi) || []).length;\nif (urlCount > 3) {\n  throw new Error('SPAM_DETECTED: Excessive URLs in message (' + urlCount + ')');\n}\n\n// 3. Blocklist keyword patterns\nconst spamPatterns = [\n  /\\bcrypto\\b/i, /\\bSEO\\b/i, /\\bbacklink/i,\n  /\\bcasino/i, /\\bviagra/i, /click here.*free/i,\n  /\\bNFT\\b/i, /\\bweb3\\b/i, /\\bblockchain\\b/i,\n  /buy\\s+followers/i, /\\bpayday\\s+loan/i\n];\nfor (const pattern of spamPatterns) {\n  if (pattern.test(message)) {\n    throw new Error('SPAM_DETECTED: Blocked pattern match: ' + pattern.toString());\n  }\n}\n\n// 4. Empty message from website form (not from chatbot which has conversation_summary)\nif (body._source === 'website' && (!message || message.trim().length < 5)) {\n  throw new Error('SPAM_DETECTED: Message too short or empty');\n}\n\nreturn [$input.first()];\n"
+        },
+        "id": "spam-filter",
+        "name": "Spam Filter",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          720,
+          432
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// NORMALISE PAYLOAD \u2014 unify website form + chatbot into\n// a common schema for downstream Outlook + Claude nodes\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst body = $input.first().json;\nconst isWebsite = body._source === 'website';\n\n// --- Unified client object ---\nconst client = {\n  name:  isWebsite ? body.form_data.name  : (body.client?.name || 'Unknown'),\n  email: isWebsite ? body.form_data.email : (body.client?.email || ''),\n  phone: isWebsite ? (body.form_data.phone || '') : (body.client?.phone || ''),\n  lead_score: isWebsite ? null : (body.intelligence?.lead_score || body.client?.lead_score || null),\n  classification: isWebsite ? 'website_form' : (body.intelligence?.classification || body.client?.classification || 'standard'),\n  source_page: isWebsite ? (body.metadata?.page_url || '') : (body.client?.source_page || ''),\n};\n\n// --- Unified enquiry object ---\nconst enquiry = {\n  destination: isWebsite ? (body.form_data.destination || '') : (body.enquiry?.destination || ''),\n  travel_dates: isWebsite ? (body.form_data.travel_dates || '') : (body.enquiry?.travel_dates?.start || ''),\n  duration: isWebsite ? (body.form_data.duration || '') : (body.enquiry?.duration_days ? body.enquiry.duration_days + ' days' : ''),\n  adults: isWebsite ? (body.form_data.party_size?.adults || '') : (body.enquiry?.pax?.adults || ''),\n  children: isWebsite ? (body.form_data.party_size?.children || 0) : (body.enquiry?.pax?.children || 0),\n  children_ages: isWebsite ? (body.form_data.party_size?.children_ages || []) : [],\n  budget: isWebsite ? (body.form_data.budget_range || '') : (\n    body.enquiry?.budget_range?.currency && body.enquiry?.budget_range?.max\n      ? body.enquiry.budget_range.currency + ' ' + body.enquiry.budget_range.max\n      : ''\n  ),\n  experience_type: isWebsite ? (body.form_data.experience_type || []) : (body.enquiry?.experience_type || []),\n  special_occasion: isWebsite ? (body.form_data.special_occasion || null) : null,\n  message: isWebsite ? (body.form_data.message || '') : (body.conversation_summary || body.enquiry?.special_requests || ''),\n  how_heard: isWebsite ? (body.form_data.how_heard || '') : '',\n};\n\n// --- Intelligence (chatbot provides this, website gets defaults) ---\nconst intelligence = {\n  primary_intent: isWebsite ? 'website_enquiry' : (body.intelligence?.primary_intent || 'general_enquiry'),\n  booking_stage: isWebsite ? 'considering' : (body.intelligence?.booking_stage || 'browsing'),\n  urgency: isWebsite ? 'medium' : (body.intelligence?.urgency || 'low'),\n  sentiment: isWebsite ? 'neutral' : (body.intelligence?.sentiment || 'neutral'),\n  lead_score: client.lead_score,\n};\n\n// --- Build HTML email body ---\nconst totalPax = (parseInt(enquiry.adults) || 0) + (parseInt(enquiry.children) || 0);\nconst childrenInfo = enquiry.children > 0\n  ? enquiry.children + ' children' + (enquiry.children_ages.length ? ' (ages: ' + enquiry.children_ages.join(', ') + ')' : '')\n  : 'None';\n\nconst emailHtml = `\n<div style=\"font-family:Arial,sans-serif;max-width:640px;margin:0 auto\">\n  <div style=\"background:#2c5f2d;color:white;padding:16px 20px;border-radius:8px 8px 0 0\">\n    <h2 style=\"margin:0;font-size:18px\">New Travel Enquiry \u2014 ${client.name}</h2>\n    <p style=\"margin:4px 0 0;font-size:12px;opacity:0.8\">Source: ${isWebsite ? 'Website Form' : 'AI Chatbot'} | ${new Date().toISOString()}</p>\n  </div>\n  <table style=\"border-collapse:collapse;width:100%;border:1px solid #ddd\">\n    <tr style=\"background:#f7f7f7\">\n      <td style=\"padding:10px 14px;font-weight:bold;width:35%;border-bottom:1px solid #ddd\">Name</td>\n      <td style=\"padding:10px 14px;border-bottom:1px solid #ddd\">${client.name}</td>\n    </tr>\n    <tr>\n      <td style=\"padding:10px 14px;font-weight:bold;border-bottom:1px solid #ddd\">Email</td>\n      <td style=\"padding:10px 14px;border-bottom:1px solid #ddd\"><a href=\"mailto:${client.email}\">${client.email}</a></td>\n    </tr>\n    <tr style=\"background:#f7f7f7\">\n      <td style=\"padding:10px 14px;font-weight:bold;border-bottom:1px solid #ddd\">Phone</td>\n      <td style=\"padding:10px 14px;border-bottom:1px solid #ddd\">${client.phone || 'Not provided'}</td>\n    </tr>\n    <tr>\n      <td style=\"padding:10px 14px;font-weight:bold;border-bottom:1px solid #ddd\">Destination</td>\n      <td style=\"padding:10px 14px;border-bottom:1px solid #ddd\"><strong>${enquiry.destination || 'Not specified'}</strong></td>\n    </tr>\n    <tr style=\"background:#f7f7f7\">\n      <td style=\"padding:10px 14px;font-weight:bold;border-bottom:1px solid #ddd\">Travel Dates</td>\n      <td style=\"padding:10px 14px;border-bottom:1px solid #ddd\">${enquiry.travel_dates || 'Flexible'}</td>\n    </tr>\n    <tr>\n      <td style=\"padding:10px 14px;font-weight:bold;border-bottom:1px solid #ddd\">Duration</td>\n      <td style=\"padding:10px 14px;border-bottom:1px solid #ddd\">${enquiry.duration || 'TBD'}</td>\n    </tr>\n    <tr style=\"background:#f7f7f7\">\n      <td style=\"padding:10px 14px;font-weight:bold;border-bottom:1px solid #ddd\">Party Size</td>\n      <td style=\"padding:10px 14px;border-bottom:1px solid #ddd\">${enquiry.adults || '?'} adults, ${childrenInfo}</td>\n    </tr>\n    <tr>\n      <td style=\"padding:10px 14px;font-weight:bold;border-bottom:1px solid #ddd\">Budget</td>\n      <td style=\"padding:10px 14px;border-bottom:1px solid #ddd\">${enquiry.budget || 'Not specified'}</td>\n    </tr>\n    <tr style=\"background:#f7f7f7\">\n      <td style=\"padding:10px 14px;font-weight:bold;border-bottom:1px solid #ddd\">Experience</td>\n      <td style=\"padding:10px 14px;border-bottom:1px solid #ddd\">${(enquiry.experience_type || []).join(', ') || 'Not specified'}</td>\n    </tr>\n    ${enquiry.special_occasion ? '<tr><td style=\"padding:10px 14px;font-weight:bold;border-bottom:1px solid #ddd\">Special Occasion</td><td style=\"padding:10px 14px;border-bottom:1px solid #ddd\">' + enquiry.special_occasion + '</td></tr>' : ''}\n    ${enquiry.how_heard ? '<tr style=\"background:#f7f7f7\"><td style=\"padding:10px 14px;font-weight:bold;border-bottom:1px solid #ddd\">How Heard</td><td style=\"padding:10px 14px;border-bottom:1px solid #ddd\">' + enquiry.how_heard + '</td></tr>' : ''}\n    <tr>\n      <td colspan=\"2\" style=\"padding:14px;background:#fafafa;border-top:2px solid #2c5f2d\">\n        <strong>Message:</strong><br/>\n        <div style=\"margin-top:6px;white-space:pre-wrap\">${enquiry.message || 'No additional message'}</div>\n      </td>\n    </tr>\n    <tr>\n      <td colspan=\"2\" style=\"padding:8px 14px;font-size:11px;color:#888;background:#f0f0f0\">\n        Lead Score: ${intelligence.lead_score || 'N/A'} | Stage: ${intelligence.booking_stage} | Urgency: ${intelligence.urgency} | Sentiment: ${intelligence.sentiment} | Source: ${client.source_page || 'Direct'}\n      </td>\n    </tr>\n  </table>\n</div>`;\n\n// --- Email subject ---\nconst subjectTag = intelligence.urgency === 'high' || intelligence.urgency === 'critical' ? 'URGENT' : 'NEW';\nconst emailSubject = `[${subjectTag}] Enquiry: ${client.name} \u2014 ${enquiry.destination || 'General'}`;\n\nreturn [{\n  json: {\n    _source: body._source,\n    client,\n    enquiry,\n    intelligence,\n    emailSubject,\n    emailHtml,\n    timestamp: body.timestamp || new Date().toISOString(),\n    raw: body,\n  }\n}];\n"
+        },
+        "id": "normalise-payload",
+        "name": "Normalise Payload",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          944,
+          432
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// MERGE \u2014 carry forward normalised data + Outlook message ID\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst outlookResponse = $input.first().json;\nconst prevData = $('Normalise Payload').first().json;\n\nreturn [{\n  json: {\n    ...prevData,\n    outlookMessageId: outlookResponse.id,\n  }\n}];\n"
+        },
+        "id": "merge-message-id",
+        "name": "Capture Message ID",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1408,
+          432
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.anthropic.com/v1/messages",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "x-api-key",
+                "value": "={{ $env.ANTHROPIC_API_KEY }}"
+              },
+              {
+                "name": "anthropic-version",
+                "value": "2023-06-01"
+              },
+              {
+                "name": "content-type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ model: $env.CLAUDE_MODEL || \"claude-sonnet-4-5-20250929\", max_tokens: 200, temperature: 0.1, messages: [{ role: \"user\", content: \"You are an email priority classifier for Mahlatini, a luxury African safari and travel company.\\n\\nClassify the following customer enquiry into exactly ONE priority level.\\n\\nRules:\\n- IMMEDIATE: Travel within 30 days, OR explicitly says urgent/ASAP, OR lead_score >= 80, OR booking_stage is ready_to_book, OR mentions complaint/problem with existing booking, OR urgency is high/critical\\n- IMPORTANT: Travel within 90 days, OR lead_score >= 50, OR budget > \u00a310000, OR booking_stage is considering, OR group size >= 6, OR special_occasion is set\\n- NOT_IMPORTANT: General browsing, no dates, low budget signals, newsletter signups, blog-related questions, lead_score < 30\\n\\nRespond with ONLY valid JSON, no markdown:\\n{\\\"classification\\\": \\\"IMMEDIATE|IMPORTANT|NOT_IMPORTANT\\\", \\\"reason\\\": \\\"one sentence explanation\\\", \\\"confidence\\\": 0.0-1.0}\\n\\n---\\nENQUIRY:\\nName: \" + $json.client.name + \"\\nDestination: \" + ($json.enquiry.destination || \"Not specified\") + \"\\nTravel Dates: \" + ($json.enquiry.travel_dates || \"Not specified\") + \"\\nBudget: \" + ($json.enquiry.budget || \"Not specified\") + \"\\nParty Size: \" + (($json.enquiry.adults || 0) + ($json.enquiry.children || 0)) + \" people\\nLead Score: \" + ($json.intelligence.lead_score || \"N/A\") + \"\\nBooking Stage: \" + ($json.intelligence.booking_stage || \"unknown\") + \"\\nUrgency: \" + ($json.intelligence.urgency || \"unknown\") + \"\\nSpecial Occasion: \" + ($json.enquiry.special_occasion || \"None\") + \"\\nMessage: \" + ($json.enquiry.message || \"No message\").substring(0, 1000) }] }) }}",
+          "options": {
+            "timeout": 30000
+          }
+        },
+        "id": "claude-classify",
+        "name": "Claude: Classify Priority",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1648,
+          432
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// PARSE CLAUDE RESPONSE \u2014 extract classification from JSON\n// Claude Messages API: { content: [{ type: \"text\", text: \"...\" }] }\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst prevData = $('Capture Message ID').first().json;\nconst claudeResponse = $input.first().json;\n\nlet classification;\ntry {\n  const rawText = claudeResponse.content[0].text;\n  // Strip markdown code fences if present\n  const cleaned = rawText.replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/i, '').trim();\n  classification = JSON.parse(cleaned);\n} catch (e) {\n  classification = {\n    classification: 'IMPORTANT',\n    reason: 'Claude response parse error \u2014 defaulting to IMPORTANT for safety',\n    confidence: 0.0,\n  };\n}\n\n// Validate classification value\nconst valid = ['IMMEDIATE', 'IMPORTANT', 'NOT_IMPORTANT'];\nif (!valid.includes(classification.classification)) {\n  classification.classification = 'IMPORTANT';\n  classification.reason = 'Invalid classification value \u2014 defaulting to IMPORTANT';\n}\n\nreturn [{\n  json: {\n    ...prevData,\n    classification: classification.classification,\n    classificationReason: classification.reason,\n    classificationConfidence: classification.confidence || 0,\n  }\n}];\n"
+        },
+        "id": "parse-claude",
+        "name": "Parse Classification",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1888,
+          368
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// CLAUDE FALLBACK \u2014 API failed after retries, default safe\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst prevData = $('Capture Message ID').first().json;\n\nreturn [{\n  json: {\n    ...prevData,\n    classification: 'IMPORTANT',\n    classificationReason: 'Claude API unavailable \u2014 defaulting to IMPORTANT for human review',\n    classificationConfidence: 0.0,\n    classificationError: true,\n  }\n}];\n"
+        },
+        "id": "claude-fallback",
+        "name": "Claude Fallback (IMPORTANT)",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1888,
+          544
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// BUILD PATCH \u2014 construct the Outlook update body based on\n// Claude classification\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst data = $input.first().json;\nconst cls = data.classification;\n\nconst importanceMap = {\n  'IMMEDIATE': 'high',\n  'IMPORTANT': 'normal',\n  'NOT_IMPORTANT': 'low',\n};\n\nconst flagMap = {\n  'IMMEDIATE': 'flagged',\n  'IMPORTANT': 'notFlagged',\n  'NOT_IMPORTANT': 'notFlagged',\n};\n\nreturn [{\n  json: {\n    ...data,\n    outlookPatch: {\n      categories: [cls],\n      importance: importanceMap[cls] || 'normal',\n      flag: {\n        flagStatus: flagMap[cls] || 'notFlagged',\n      },\n    },\n  }\n}];\n"
+        },
+        "id": "build-patch",
+        "name": "Build Outlook Patch",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2128,
+          432
+        ]
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "={{ 'https://graph.microsoft.com/v1.0/me/messages/' + $json.outlookMessageId }}",
+          "authentication": "genericCredentialType",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.outlookPatch) }}",
+          "options": {},
+          "genericAuthType": "oAuth2Api"
+        },
+        "id": "outlook-update-category",
+        "name": "Outlook: Apply Category + Flag",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2352,
+          432
+        ],
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "oAuth2Api": {
+            "id": "wZWUkzbncn5Ti9dm",
+            "name": "Outlook Graph OAuth2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ 'https://graph.microsoft.com/v1.0/me/messages/' + $json.id + '/send' }}",
+          "authentication": "genericCredentialType",
+          "options": {},
+          "genericAuthType": "oAuth2Api"
+        },
+        "id": "outlook-send",
+        "name": "Outlook: Send Email",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2560,
+          432
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 3000,
+        "credentials": {
+          "oAuth2Api": {
+            "id": "wZWUkzbncn5Ti9dm",
+            "name": "Outlook Graph OAuth2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO analytics_events (event_type, payload, created_at)\nVALUES (\n  'enquiry_classified',\n  '{{ JSON.stringify($('Capture Message ID').first().json) }}'::jsonb,\n  NOW()\n)",
+          "options": {}
+        },
+        "id": "postgres-log",
+        "name": "Postgres: Log Classification",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          2784,
+          432
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "GldFK4j9aQixrrxs",
+            "name": "Mahlatini PostgreSQL"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify({ status: \"ok\", classification: $(\"Build Outlook Patch\").first().json.classification || \"UNKNOWN\", reason: $(\"Build Outlook Patch\").first().json.classificationReason || \"\", confidence: $(\"Build Outlook Patch\").first().json.classificationConfidence || 0, outlook_message_id: $(\"Capture Message ID\").first().json.outlookMessageId || \"\" }) }}",
+          "options": {}
+        },
+        "id": "respond-webhook",
+        "name": "Respond to Webhook",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          3008,
+          304
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// CHATBOT LOG \u2014 for chatbot-sourced leads, just return OK\n// (no webhook response needed \u2014 chatbot uses fire-and-forget)\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nreturn [{ json: { status: 'ok', source: 'chatbot', classification: $json.classification } }];\n"
+        },
+        "id": "chatbot-complete",
+        "name": "Chatbot: Complete",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3008,
+          512
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "source-check",
+                "leftValue": "={{ $json._source }}",
+                "rightValue": "website",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "route-response",
+        "name": "Route: By Source",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          2784,
+          272
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://graph.microsoft.com/v1.0/me/messages",
+          "authentication": "genericCredentialType",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ subject: $json.emailSubject, body: { contentType: 'HTML', content: $json.emailHtml }, toRecipients: [{ emailAddress: { address: $env.OUTLOOK_MAILBOX || 'mark@thevortextrader.com' } }], importance: 'normal' }) }}",
+          "options": {},
+          "genericAuthType": "oAuth2Api",
+          "retryOnFail": true,
+          "maxTries": 3,
+          "waitBetweenTries": 3000
+        },
+        "id": "outlook-create-draft",
+        "name": "Outlook: Create Draft",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1184,
+          432
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 3000,
+        "credentials": {
+          "oAuth2Api": {
+            "id": "wZWUkzbncn5Ti9dm",
+            "name": "Outlook Graph OAuth2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// TO DO: BUILD TASK \u2014 map enquiry data \u2192 MS To Do API payload\n// Runs in parallel with Route + Postgres after email is sent.\n// Uses $('Build Outlook Patch').first().json for normalised data\n// (HTTP Request nodes replace $json with API response).\n//\n// API: POST /me/todo/lists/{listId}/tasks\n// Docs: https://learn.microsoft.com/en-us/graph/api/todotasklist-post-tasks\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst data = $('Build Outlook Patch').first().json;\nconst client = data.client || {};\nconst enquiry = data.enquiry || {};\nconst intelligence = data.intelligence || {};\nconst cls = data.classification || 'IMPORTANT';\n\n// --- Importance mapping: Claude classification \u2192 To Do importance ---\n// To Do supports: low, normal, high\nconst importanceMap = {\n  'IMMEDIATE': 'high',\n  'IMPORTANT': 'normal',\n  'NOT_IMPORTANT': 'low',\n};\nconst importance = importanceMap[cls] || 'normal';\n\n// --- Task title ---\nconst destination = enquiry.destination || 'General';\nconst title = `[${cls}] ${client.name || 'Unknown'} \u2014 ${destination}`;\n\n// --- Description (plain text) ---\nconst descParts = [\n  `Name: ${client.name || 'N/A'}`,\n  `Email: ${client.email || 'N/A'}`,\n  `Phone: ${client.phone || 'Not provided'}`,\n  `Destination: ${destination}`,\n  `Travel Dates: ${enquiry.travel_dates || 'Flexible'}`,\n  `Duration: ${enquiry.duration || 'TBD'}`,\n  `Party: ${enquiry.adults || '?'} adults, ${enquiry.children || 0} children`,\n  `Budget: ${enquiry.budget || 'Not specified'}`,\n  `Experience: ${(enquiry.experience_type || []).join(', ') || 'Not specified'}`,\n  `Lead Score: ${intelligence.lead_score || 'N/A'}`,\n  `Booking Stage: ${intelligence.booking_stage || 'unknown'}`,\n  `Urgency: ${intelligence.urgency || 'unknown'}`,\n  `Classification: ${cls} (${data.classificationReason || 'N/A'})`,\n  `Source: ${data._source || 'unknown'}`,\n  '',\n  'Message:',\n  (enquiry.message || 'No message').substring(0, 1500),\n];\nconst description = descParts.join('\\n');\n\n// --- Due date: 3 business days from now for follow-up ---\nconst now = new Date();\nlet dueDate = new Date(now);\nlet addedDays = 0;\nwhile (addedDays < 3) {\n  dueDate.setDate(dueDate.getDate() + 1);\n  if (dueDate.getDay() !== 0 && dueDate.getDay() !== 6) addedDays++;\n}\n\n// --- Build the To Do task payload ---\nconst todoTask = {\n  title: title.substring(0, 255),\n  body: {\n    content: description,\n    contentType: 'text',\n  },\n  importance: importance,\n  status: 'notStarted',\n  dueDateTime: {\n    dateTime: dueDate.toISOString().replace('Z', ''),\n    timeZone: 'UTC',\n  },\n  categories: [cls],\n};\n\n// --- Build the API URL using the list ID from env ---\nconst listId = $env.TODO_LIST_ID;\nconst apiUrl = `https://graph.microsoft.com/v1.0/me/todo/lists/${listId}/tasks`;\n\nreturn [{\n  json: {\n    todoTask,\n    todoApiUrl: apiUrl,\n    todoMeta: {\n      clientEmail: client.email,\n      clientName: client.name,\n      classification: cls,\n      source: data._source,\n    },\n  }\n}];\n"
+        },
+        "id": "todo-build-task",
+        "name": "ToDo: Build Task",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2784,
+          640
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $json.todoApiUrl }}",
+          "authentication": "genericCredentialType",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.todoTask) }}",
+          "options": {
+            "timeout": 15000
+          },
+          "genericAuthType": "oAuth2Api"
+        },
+        "id": "todo-create-task",
+        "name": "ToDo: Create Task",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3008,
+          640
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "oAuth2Api": {
+            "id": "wZWUkzbncn5Ti9dm",
+            "name": "Outlook Graph OAuth2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "// Power BI: Build Payload\n// Transforms n8n payload to Power BI streaming dataset schema\n\nconst payload = $('Normalise Payload').first().json;\nconst classification = $('Parse Classification').first().json;\n\n// Check if Power BI is configured\nif (!$env.POWERBI_PUSH_URL || $env.POWERBI_PUSH_URL.includes('your-workspace')) {\n  console.log('Power BI not configured - skipping push');\n  return []; // Skip if not configured\n}\n\n// Build Power BI row (15 columns)\nconst powerbiRow = {\n  enquiryId: $execution.id || `exec-${Date.now()}`,\n  clientName: payload.clientName || 'Anonymous',\n  clientEmail: payload.clientEmail || 'not-provided@example.com',\n  destination: payload.destination || 'Not specified',\n  classification: classification.classification || 'IMPORTANT',\n  leadScore: parseInt(payload.lead_score || 50),\n  budgetMax: parseFloat(payload.budget_max || 0),\n  paxTotal: parseInt(payload.pax_adults || 0) + parseInt(payload.pax_children || 0),\n  bookingStage: payload.booking_stage || 'considering',\n  source: payload.source || 'website',\n  assignedAgent: 'Unassigned', // Will be updated when To Do task is assigned\n  createdDate: new Date().toISOString(),\n  responseTimeSecs: Math.round((Date.now() - new Date(payload.submitted_at || Date.now()).getTime()) / 1000),\n  classificationConfidence: parseFloat(classification.classificationConfidence || 0.8),\n  urgency: classification.classification === 'IMMEDIATE' ? 'high' :\n           classification.classification === 'IMPORTANT' ? 'medium' : 'low'\n};\n\nconsole.log('Power BI payload built:', JSON.stringify(powerbiRow, null, 2));\nreturn [{ json: powerbiRow }];"
+        },
+        "id": "powerbi-build-payload-node-id",
+        "name": "Power BI: Build Payload",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2784,
+          800
+        ],
+        "alwaysOutputData": false,
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.POWERBI_PUSH_URL }}",
+          "authentication": "none",
+          "sendBody": true,
+          "bodyContentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "=[{{ $json }}]",
+          "options": {
+            "timeout": 10000,
+            "redirect": {
+              "redirect": {
+                "followRedirects": true,
+                "maxRedirects": 5
+              }
+            }
+          }
+        },
+        "id": "powerbi-push-row-node-id",
+        "name": "Power BI: Push Row",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3008,
+          800
+        ],
+        "alwaysOutputData": false,
+        "continueOnFail": true
+      }
+    ],
+    "connections": {
+      "Webhook: Website Enquiry": {
+        "main": [
+          [
+            {
+              "node": "Validate Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Webhook: Chatbot Lead": {
+        "main": [
+          [
+            {
+              "node": "Validate Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validate Input": {
+        "main": [
+          [
+            {
+              "node": "Spam Filter",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Spam Filter": {
+        "main": [
+          [
+            {
+              "node": "Normalise Payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalise Payload": {
+        "main": [
+          [
+            {
+              "node": "Outlook: Create Draft",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Capture Message ID": {
+        "main": [
+          [
+            {
+              "node": "Claude: Classify Priority",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Claude: Classify Priority": {
+        "main": [
+          [
+            {
+              "node": "Parse Classification",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Claude Fallback (IMPORTANT)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Classification": {
+        "main": [
+          [
+            {
+              "node": "Build Outlook Patch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Claude Fallback (IMPORTANT)": {
+        "main": [
+          [
+            {
+              "node": "Build Outlook Patch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Outlook Patch": {
+        "main": [
+          [
+            {
+              "node": "Outlook: Apply Category + Flag",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Outlook: Apply Category + Flag": {
+        "main": [
+          [
+            {
+              "node": "Outlook: Send Email",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Outlook: Send Email": {
+        "main": [
+          [
+            {
+              "node": "Route: By Source",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Postgres: Log Classification",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "ToDo: Build Task",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Power BI: Build Payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Route: By Source": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Chatbot: Complete",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Outlook: Create Draft": {
+        "main": [
+          [
+            {
+              "node": "Capture Message ID",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "ToDo: Build Task": {
+        "main": [
+          [
+            {
+              "node": "ToDo: Create Task",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Chatbot: Complete": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Power BI: Build Payload": {
+        "main": [
+          [
+            {
+              "node": "Power BI: Push Row",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "saveManualExecutions": true,
+      "callerPolicy": "workflowsFromSameOwner",
+      "errorWorkflow": "1HciZgndJ328cjvH",
+      "availableInMCP": false
+    },
+    "staticData": null,
+    "meta": null,
+    "pinData": {},
+    "versionId": "b2469e2b-1535-4b3e-95c6-c4e15a0b0220",
+    "activeVersionId": "b2469e2b-1535-4b3e-95c6-c4e15a0b0220",
+    "versionCounter": 137,
+    "triggerCount": 2,
+    "shared": [
+      {
+        "updatedAt": "2026-02-14T18:27:00.403Z",
+        "createdAt": "2026-02-14T18:27:00.403Z",
+        "role": "workflow:owner",
+        "workflowId": "6g2SZsGNZiKpP01K",
+        "projectId": "om4pVmcHJX6Ic7Df",
+        "project": {
+          "updatedAt": "2026-02-14T18:25:42.835Z",
+          "createdAt": "2026-02-14T01:03:47.602Z",
+          "id": "om4pVmcHJX6Ic7Df",
+          "name": "Mahlatini Admin <admin@mahlatini.com>",
+          "type": "personal",
+          "icon": null,
+          "description": null,
+          "creatorId": "15c161a4-1e23-4320-8a24-a26a9570ef93",
+          "projectRelations": [
+            {
+              "updatedAt": "2026-02-14T01:03:47.602Z",
+              "createdAt": "2026-02-14T01:03:47.602Z",
+              "userId": "15c161a4-1e23-4320-8a24-a26a9570ef93",
+              "projectId": "om4pVmcHJX6Ic7Df",
+              "user": {
+                "updatedAt": "2026-02-16T10:09:11.000Z",
+                "createdAt": "2026-02-14T01:03:47.490Z",
+                "id": "15c161a4-1e23-4320-8a24-a26a9570ef93",
+                "email": "admin@mahlatini.com",
+                "firstName": "Mahlatini",
+                "lastName": "Admin",
+                "personalizationAnswers": {
+                  "version": "v4",
+                  "personalization_survey_submitted_at": "2026-02-14T18:39:44.892Z",
+                  "personalization_survey_n8n_version": "2.7.5",
+                  "automationGoalDevops": [
+                    "ticketing-systems-integrations",
+                    "reporting"
+                  ],
+                  "companyType": "saas",
+                  "role": "devops"
+                },
+                "settings": {
+                  "userActivated": true,
+                  "firstSuccessfulWorkflowId": "6g2SZsGNZiKpP01K",
+                  "userActivatedAt": 1771108220019
+                },
+                "disabled": false,
+                "mfaEnabled": false,
+                "lastActiveAt": "2026-02-16",
+                "isPending": false
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "tags": [],
+    "parentFolder": null,
+    "activeVersion": {
+      "updatedAt": "2026-02-15T20:49:34.141Z",
+      "createdAt": "2026-02-15T20:49:34.141Z",
+      "versionId": "b2469e2b-1535-4b3e-95c6-c4e15a0b0220",
+      "workflowId": "6g2SZsGNZiKpP01K",
+      "nodes": [
+        {
+          "parameters": {
+            "httpMethod": "POST",
+            "path": "website-enquiry",
+            "responseMode": "responseNode",
+            "options": {
+              "rawBody": true
+            }
+          },
+          "id": "webhook-trigger",
+          "name": "Webhook: Website Enquiry",
+          "type": "n8n-nodes-base.webhook",
+          "typeVersion": 2,
+          "position": [
+            240,
+            304
+          ],
+          "webhookId": "website-enquiry"
+        },
+        {
+          "parameters": {
+            "httpMethod": "POST",
+            "path": "new-enquiry",
+            "responseMode": "responseNode",
+            "options": {}
+          },
+          "id": "webhook-chatbot",
+          "name": "Webhook: Chatbot Lead",
+          "type": "n8n-nodes-base.webhook",
+          "typeVersion": 2,
+          "position": [
+            240,
+            560
+          ],
+          "webhookId": "new-enquiry"
+        },
+        {
+          "parameters": {
+            "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// VALIDATE INPUT \u2014 checks required fields + timestamp\n// The webhook node wraps POST body inside $json.body\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst raw = $input.first().json;\nconst body = raw.body || raw; // unwrap webhook envelope\nconst errors = [];\n\n// --- Determine source ---\nconst isWebsiteForm = body.source === 'website_form';\nconst isChatbot = body.event_type === 'new_enquiry';\n\nif (!isWebsiteForm && !isChatbot) {\n  errors.push('Unknown source: expected website_form or chatbot new_enquiry');\n}\n\n// --- Required fields ---\nconst email = isWebsiteForm ? body.form_data?.email : body.client?.email;\nconst name  = isWebsiteForm ? body.form_data?.name  : body.client?.name;\n\nif (!email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {\n  errors.push('Invalid or missing email address');\n}\nif (!name || name.trim().length < 2) {\n  errors.push('Invalid or missing name (min 2 chars)');\n}\n\n// --- Timestamp freshness (website form only, 5 min window) ---\nif (isWebsiteForm && body.timestamp) {\n  const ts = new Date(body.timestamp);\n  const ageMs = Date.now() - ts.getTime();\n  if (isNaN(ts.getTime()) || ageMs > 300000 || ageMs < -60000) {\n    errors.push('Timestamp is missing, stale (>5 min), or in the future');\n  }\n}\n\nif (errors.length > 0) {\n  throw new Error('Validation failed: ' + errors.join('; '));\n}\n\nreturn [{ json: { ...body, _source: isWebsiteForm ? 'website' : 'chatbot' } }];\n"
+          },
+          "id": "validate-input",
+          "name": "Validate Input",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [
+            512,
+            432
+          ]
+        },
+        {
+          "parameters": {
+            "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// SPAM FILTER \u2014 honeypot, URL density, blocklist keywords\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst body = $input.first().json;\nconst formData = body.form_data || body.enquiry || {};\nconst message = formData.message || body.enquiry?.special_requests || body.conversation_summary || '';\n\n// 1. Honeypot check (hidden field that bots fill in)\nif (formData._hp_field) {\n  throw new Error('SPAM_DETECTED: Honeypot field populated');\n}\n\n// 2. Link density (more than 3 URLs = suspicious)\nconst urlCount = (message.match(/https?:\\/\\//gi) || []).length;\nif (urlCount > 3) {\n  throw new Error('SPAM_DETECTED: Excessive URLs in message (' + urlCount + ')');\n}\n\n// 3. Blocklist keyword patterns\nconst spamPatterns = [\n  /\\bcrypto\\b/i, /\\bSEO\\b/i, /\\bbacklink/i,\n  /\\bcasino/i, /\\bviagra/i, /click here.*free/i,\n  /\\bNFT\\b/i, /\\bweb3\\b/i, /\\bblockchain\\b/i,\n  /buy\\s+followers/i, /\\bpayday\\s+loan/i\n];\nfor (const pattern of spamPatterns) {\n  if (pattern.test(message)) {\n    throw new Error('SPAM_DETECTED: Blocked pattern match: ' + pattern.toString());\n  }\n}\n\n// 4. Empty message from website form (not from chatbot which has conversation_summary)\nif (body._source === 'website' && (!message || message.trim().length < 5)) {\n  throw new Error('SPAM_DETECTED: Message too short or empty');\n}\n\nreturn [$input.first()];\n"
+          },
+          "id": "spam-filter",
+          "name": "Spam Filter",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [
+            720,
+            432
+          ]
+        },
+        {
+          "parameters": {
+            "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// NORMALISE PAYLOAD \u2014 unify website form + chatbot into\n// a common schema for downstream Outlook + Claude nodes\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst body = $input.first().json;\nconst isWebsite = body._source === 'website';\n\n// --- Unified client object ---\nconst client = {\n  name:  isWebsite ? body.form_data.name  : (body.client?.name || 'Unknown'),\n  email: isWebsite ? body.form_data.email : (body.client?.email || ''),\n  phone: isWebsite ? (body.form_data.phone || '') : (body.client?.phone || ''),\n  lead_score: isWebsite ? null : (body.intelligence?.lead_score || body.client?.lead_score || null),\n  classification: isWebsite ? 'website_form' : (body.intelligence?.classification || body.client?.classification || 'standard'),\n  source_page: isWebsite ? (body.metadata?.page_url || '') : (body.client?.source_page || ''),\n};\n\n// --- Unified enquiry object ---\nconst enquiry = {\n  destination: isWebsite ? (body.form_data.destination || '') : (body.enquiry?.destination || ''),\n  travel_dates: isWebsite ? (body.form_data.travel_dates || '') : (body.enquiry?.travel_dates?.start || ''),\n  duration: isWebsite ? (body.form_data.duration || '') : (body.enquiry?.duration_days ? body.enquiry.duration_days + ' days' : ''),\n  adults: isWebsite ? (body.form_data.party_size?.adults || '') : (body.enquiry?.pax?.adults || ''),\n  children: isWebsite ? (body.form_data.party_size?.children || 0) : (body.enquiry?.pax?.children || 0),\n  children_ages: isWebsite ? (body.form_data.party_size?.children_ages || []) : [],\n  budget: isWebsite ? (body.form_data.budget_range || '') : (\n    body.enquiry?.budget_range?.currency && body.enquiry?.budget_range?.max\n      ? body.enquiry.budget_range.currency + ' ' + body.enquiry.budget_range.max\n      : ''\n  ),\n  experience_type: isWebsite ? (body.form_data.experience_type || []) : (body.enquiry?.experience_type || []),\n  special_occasion: isWebsite ? (body.form_data.special_occasion || null) : null,\n  message: isWebsite ? (body.form_data.message || '') : (body.conversation_summary || body.enquiry?.special_requests || ''),\n  how_heard: isWebsite ? (body.form_data.how_heard || '') : '',\n};\n\n// --- Intelligence (chatbot provides this, website gets defaults) ---\nconst intelligence = {\n  primary_intent: isWebsite ? 'website_enquiry' : (body.intelligence?.primary_intent || 'general_enquiry'),\n  booking_stage: isWebsite ? 'considering' : (body.intelligence?.booking_stage || 'browsing'),\n  urgency: isWebsite ? 'medium' : (body.intelligence?.urgency || 'low'),\n  sentiment: isWebsite ? 'neutral' : (body.intelligence?.sentiment || 'neutral'),\n  lead_score: client.lead_score,\n};\n\n// --- Build HTML email body ---\nconst totalPax = (parseInt(enquiry.adults) || 0) + (parseInt(enquiry.children) || 0);\nconst childrenInfo = enquiry.children > 0\n  ? enquiry.children + ' children' + (enquiry.children_ages.length ? ' (ages: ' + enquiry.children_ages.join(', ') + ')' : '')\n  : 'None';\n\nconst emailHtml = `\n<div style=\"font-family:Arial,sans-serif;max-width:640px;margin:0 auto\">\n  <div style=\"background:#2c5f2d;color:white;padding:16px 20px;border-radius:8px 8px 0 0\">\n    <h2 style=\"margin:0;font-size:18px\">New Travel Enquiry \u2014 ${client.name}</h2>\n    <p style=\"margin:4px 0 0;font-size:12px;opacity:0.8\">Source: ${isWebsite ? 'Website Form' : 'AI Chatbot'} | ${new Date().toISOString()}</p>\n  </div>\n  <table style=\"border-collapse:collapse;width:100%;border:1px solid #ddd\">\n    <tr style=\"background:#f7f7f7\">\n      <td style=\"padding:10px 14px;font-weight:bold;width:35%;border-bottom:1px solid #ddd\">Name</td>\n      <td style=\"padding:10px 14px;border-bottom:1px solid #ddd\">${client.name}</td>\n    </tr>\n    <tr>\n      <td style=\"padding:10px 14px;font-weight:bold;border-bottom:1px solid #ddd\">Email</td>\n      <td style=\"padding:10px 14px;border-bottom:1px solid #ddd\"><a href=\"mailto:${client.email}\">${client.email}</a></td>\n    </tr>\n    <tr style=\"background:#f7f7f7\">\n      <td style=\"padding:10px 14px;font-weight:bold;border-bottom:1px solid #ddd\">Phone</td>\n      <td style=\"padding:10px 14px;border-bottom:1px solid #ddd\">${client.phone || 'Not provided'}</td>\n    </tr>\n    <tr>\n      <td style=\"padding:10px 14px;font-weight:bold;border-bottom:1px solid #ddd\">Destination</td>\n      <td style=\"padding:10px 14px;border-bottom:1px solid #ddd\"><strong>${enquiry.destination || 'Not specified'}</strong></td>\n    </tr>\n    <tr style=\"background:#f7f7f7\">\n      <td style=\"padding:10px 14px;font-weight:bold;border-bottom:1px solid #ddd\">Travel Dates</td>\n      <td style=\"padding:10px 14px;border-bottom:1px solid #ddd\">${enquiry.travel_dates || 'Flexible'}</td>\n    </tr>\n    <tr>\n      <td style=\"padding:10px 14px;font-weight:bold;border-bottom:1px solid #ddd\">Duration</td>\n      <td style=\"padding:10px 14px;border-bottom:1px solid #ddd\">${enquiry.duration || 'TBD'}</td>\n    </tr>\n    <tr style=\"background:#f7f7f7\">\n      <td style=\"padding:10px 14px;font-weight:bold;border-bottom:1px solid #ddd\">Party Size</td>\n      <td style=\"padding:10px 14px;border-bottom:1px solid #ddd\">${enquiry.adults || '?'} adults, ${childrenInfo}</td>\n    </tr>\n    <tr>\n      <td style=\"padding:10px 14px;font-weight:bold;border-bottom:1px solid #ddd\">Budget</td>\n      <td style=\"padding:10px 14px;border-bottom:1px solid #ddd\">${enquiry.budget || 'Not specified'}</td>\n    </tr>\n    <tr style=\"background:#f7f7f7\">\n      <td style=\"padding:10px 14px;font-weight:bold;border-bottom:1px solid #ddd\">Experience</td>\n      <td style=\"padding:10px 14px;border-bottom:1px solid #ddd\">${(enquiry.experience_type || []).join(', ') || 'Not specified'}</td>\n    </tr>\n    ${enquiry.special_occasion ? '<tr><td style=\"padding:10px 14px;font-weight:bold;border-bottom:1px solid #ddd\">Special Occasion</td><td style=\"padding:10px 14px;border-bottom:1px solid #ddd\">' + enquiry.special_occasion + '</td></tr>' : ''}\n    ${enquiry.how_heard ? '<tr style=\"background:#f7f7f7\"><td style=\"padding:10px 14px;font-weight:bold;border-bottom:1px solid #ddd\">How Heard</td><td style=\"padding:10px 14px;border-bottom:1px solid #ddd\">' + enquiry.how_heard + '</td></tr>' : ''}\n    <tr>\n      <td colspan=\"2\" style=\"padding:14px;background:#fafafa;border-top:2px solid #2c5f2d\">\n        <strong>Message:</strong><br/>\n        <div style=\"margin-top:6px;white-space:pre-wrap\">${enquiry.message || 'No additional message'}</div>\n      </td>\n    </tr>\n    <tr>\n      <td colspan=\"2\" style=\"padding:8px 14px;font-size:11px;color:#888;background:#f0f0f0\">\n        Lead Score: ${intelligence.lead_score || 'N/A'} | Stage: ${intelligence.booking_stage} | Urgency: ${intelligence.urgency} | Sentiment: ${intelligence.sentiment} | Source: ${client.source_page || 'Direct'}\n      </td>\n    </tr>\n  </table>\n</div>`;\n\n// --- Email subject ---\nconst subjectTag = intelligence.urgency === 'high' || intelligence.urgency === 'critical' ? 'URGENT' : 'NEW';\nconst emailSubject = `[${subjectTag}] Enquiry: ${client.name} \u2014 ${enquiry.destination || 'General'}`;\n\nreturn [{\n  json: {\n    _source: body._source,\n    client,\n    enquiry,\n    intelligence,\n    emailSubject,\n    emailHtml,\n    timestamp: body.timestamp || new Date().toISOString(),\n    raw: body,\n  }\n}];\n"
+          },
+          "id": "normalise-payload",
+          "name": "Normalise Payload",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [
+            944,
+            432
+          ]
+        },
+        {
+          "parameters": {
+            "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// MERGE \u2014 carry forward normalised data + Outlook message ID\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst outlookResponse = $input.first().json;\nconst prevData = $('Normalise Payload').first().json;\n\nreturn [{\n  json: {\n    ...prevData,\n    outlookMessageId: outlookResponse.id,\n  }\n}];\n"
+          },
+          "id": "merge-message-id",
+          "name": "Capture Message ID",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [
+            1408,
+            432
+          ]
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "https://api.anthropic.com/v1/messages",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {
+                  "name": "x-api-key",
+                  "value": "={{ $env.ANTHROPIC_API_KEY }}"
+                },
+                {
+                  "name": "anthropic-version",
+                  "value": "2023-06-01"
+                },
+                {
+                  "name": "content-type",
+                  "value": "application/json"
+                }
+              ]
+            },
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={{ JSON.stringify({ model: $env.CLAUDE_MODEL || \"claude-sonnet-4-5-20250929\", max_tokens: 200, temperature: 0.1, messages: [{ role: \"user\", content: \"You are an email priority classifier for Mahlatini, a luxury African safari and travel company.\\n\\nClassify the following customer enquiry into exactly ONE priority level.\\n\\nRules:\\n- IMMEDIATE: Travel within 30 days, OR explicitly says urgent/ASAP, OR lead_score >= 80, OR booking_stage is ready_to_book, OR mentions complaint/problem with existing booking, OR urgency is high/critical\\n- IMPORTANT: Travel within 90 days, OR lead_score >= 50, OR budget > \u00a310000, OR booking_stage is considering, OR group size >= 6, OR special_occasion is set\\n- NOT_IMPORTANT: General browsing, no dates, low budget signals, newsletter signups, blog-related questions, lead_score < 30\\n\\nRespond with ONLY valid JSON, no markdown:\\n{\\\"classification\\\": \\\"IMMEDIATE|IMPORTANT|NOT_IMPORTANT\\\", \\\"reason\\\": \\\"one sentence explanation\\\", \\\"confidence\\\": 0.0-1.0}\\n\\n---\\nENQUIRY:\\nName: \" + $json.client.name + \"\\nDestination: \" + ($json.enquiry.destination || \"Not specified\") + \"\\nTravel Dates: \" + ($json.enquiry.travel_dates || \"Not specified\") + \"\\nBudget: \" + ($json.enquiry.budget || \"Not specified\") + \"\\nParty Size: \" + (($json.enquiry.adults || 0) + ($json.enquiry.children || 0)) + \" people\\nLead Score: \" + ($json.intelligence.lead_score || \"N/A\") + \"\\nBooking Stage: \" + ($json.intelligence.booking_stage || \"unknown\") + \"\\nUrgency: \" + ($json.intelligence.urgency || \"unknown\") + \"\\nSpecial Occasion: \" + ($json.enquiry.special_occasion || \"None\") + \"\\nMessage: \" + ($json.enquiry.message || \"No message\").substring(0, 1000) }] }) }}",
+            "options": {
+              "timeout": 30000
+            }
+          },
+          "id": "claude-classify",
+          "name": "Claude: Classify Priority",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.2,
+          "position": [
+            1648,
+            432
+          ],
+          "retryOnFail": true,
+          "maxTries": 3,
+          "waitBetweenTries": 2000,
+          "onError": "continueErrorOutput"
+        },
+        {
+          "parameters": {
+            "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// PARSE CLAUDE RESPONSE \u2014 extract classification from JSON\n// Claude Messages API: { content: [{ type: \"text\", text: \"...\" }] }\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst prevData = $('Capture Message ID').first().json;\nconst claudeResponse = $input.first().json;\n\nlet classification;\ntry {\n  const rawText = claudeResponse.content[0].text;\n  // Strip markdown code fences if present\n  const cleaned = rawText.replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/i, '').trim();\n  classification = JSON.parse(cleaned);\n} catch (e) {\n  classification = {\n    classification: 'IMPORTANT',\n    reason: 'Claude response parse error \u2014 defaulting to IMPORTANT for safety',\n    confidence: 0.0,\n  };\n}\n\n// Validate classification value\nconst valid = ['IMMEDIATE', 'IMPORTANT', 'NOT_IMPORTANT'];\nif (!valid.includes(classification.classification)) {\n  classification.classification = 'IMPORTANT';\n  classification.reason = 'Invalid classification value \u2014 defaulting to IMPORTANT';\n}\n\nreturn [{\n  json: {\n    ...prevData,\n    classification: classification.classification,\n    classificationReason: classification.reason,\n    classificationConfidence: classification.confidence || 0,\n  }\n}];\n"
+          },
+          "id": "parse-claude",
+          "name": "Parse Classification",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [
+            1888,
+            368
+          ]
+        },
+        {
+          "parameters": {
+            "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// CLAUDE FALLBACK \u2014 API failed after retries, default safe\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst prevData = $('Capture Message ID').first().json;\n\nreturn [{\n  json: {\n    ...prevData,\n    classification: 'IMPORTANT',\n    classificationReason: 'Claude API unavailable \u2014 defaulting to IMPORTANT for human review',\n    classificationConfidence: 0.0,\n    classificationError: true,\n  }\n}];\n"
+          },
+          "id": "claude-fallback",
+          "name": "Claude Fallback (IMPORTANT)",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [
+            1888,
+            544
+          ]
+        },
+        {
+          "parameters": {
+            "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// BUILD PATCH \u2014 construct the Outlook update body based on\n// Claude classification\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst data = $input.first().json;\nconst cls = data.classification;\n\nconst importanceMap = {\n  'IMMEDIATE': 'high',\n  'IMPORTANT': 'normal',\n  'NOT_IMPORTANT': 'low',\n};\n\nconst flagMap = {\n  'IMMEDIATE': 'flagged',\n  'IMPORTANT': 'notFlagged',\n  'NOT_IMPORTANT': 'notFlagged',\n};\n\nreturn [{\n  json: {\n    ...data,\n    outlookPatch: {\n      categories: [cls],\n      importance: importanceMap[cls] || 'normal',\n      flag: {\n        flagStatus: flagMap[cls] || 'notFlagged',\n      },\n    },\n  }\n}];\n"
+          },
+          "id": "build-patch",
+          "name": "Build Outlook Patch",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [
+            2128,
+            432
+          ]
+        },
+        {
+          "parameters": {
+            "method": "PATCH",
+            "url": "={{ 'https://graph.microsoft.com/v1.0/me/messages/' + $json.outlookMessageId }}",
+            "authentication": "genericCredentialType",
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={{ JSON.stringify($json.outlookPatch) }}",
+            "options": {},
+            "genericAuthType": "oAuth2Api"
+          },
+          "id": "outlook-update-category",
+          "name": "Outlook: Apply Category + Flag",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.2,
+          "position": [
+            2352,
+            432
+          ],
+          "retryOnFail": true,
+          "maxTries": 2,
+          "waitBetweenTries": 2000,
+          "credentials": {
+            "oAuth2Api": {
+              "id": "wZWUkzbncn5Ti9dm",
+              "name": "Outlook Graph OAuth2"
+            }
+          }
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "={{ 'https://graph.microsoft.com/v1.0/me/messages/' + $json.id + '/send' }}",
+            "authentication": "genericCredentialType",
+            "options": {},
+            "genericAuthType": "oAuth2Api"
+          },
+          "id": "outlook-send",
+          "name": "Outlook: Send Email",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.2,
+          "position": [
+            2560,
+            432
+          ],
+          "retryOnFail": true,
+          "maxTries": 3,
+          "waitBetweenTries": 3000,
+          "credentials": {
+            "oAuth2Api": {
+              "id": "wZWUkzbncn5Ti9dm",
+              "name": "Outlook Graph OAuth2"
+            }
+          }
+        },
+        {
+          "parameters": {
+            "operation": "executeQuery",
+            "query": "INSERT INTO analytics_events (event_type, payload, created_at)\nVALUES (\n  'enquiry_classified',\n  '{{ JSON.stringify($('Capture Message ID').first().json) }}'::jsonb,\n  NOW()\n)",
+            "options": {}
+          },
+          "id": "postgres-log",
+          "name": "Postgres: Log Classification",
+          "type": "n8n-nodes-base.postgres",
+          "typeVersion": 2.5,
+          "position": [
+            2784,
+            432
+          ],
+          "credentials": {
+            "postgres": {
+              "id": "GldFK4j9aQixrrxs",
+              "name": "Mahlatini PostgreSQL"
+            }
+          }
+        },
+        {
+          "parameters": {
+            "respondWith": "json",
+            "responseBody": "={{ JSON.stringify({ status: \"ok\", classification: $(\"Build Outlook Patch\").first().json.classification || \"UNKNOWN\", reason: $(\"Build Outlook Patch\").first().json.classificationReason || \"\", confidence: $(\"Build Outlook Patch\").first().json.classificationConfidence || 0, outlook_message_id: $(\"Capture Message ID\").first().json.outlookMessageId || \"\" }) }}",
+            "options": {}
+          },
+          "id": "respond-webhook",
+          "name": "Respond to Webhook",
+          "type": "n8n-nodes-base.respondToWebhook",
+          "typeVersion": 1.1,
+          "position": [
+            3008,
+            304
+          ]
+        },
+        {
+          "parameters": {
+            "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// CHATBOT LOG \u2014 for chatbot-sourced leads, just return OK\n// (no webhook response needed \u2014 chatbot uses fire-and-forget)\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nreturn [{ json: { status: 'ok', source: 'chatbot', classification: $json.classification } }];\n"
+          },
+          "id": "chatbot-complete",
+          "name": "Chatbot: Complete",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [
+            3008,
+            512
+          ]
+        },
+        {
+          "parameters": {
+            "conditions": {
+              "options": {
+                "caseSensitive": true,
+                "leftValue": "",
+                "typeValidation": "strict"
+              },
+              "conditions": [
+                {
+                  "id": "source-check",
+                  "leftValue": "={{ $json._source }}",
+                  "rightValue": "website",
+                  "operator": {
+                    "type": "string",
+                    "operation": "equals"
+                  }
+                }
+              ],
+              "combinator": "and"
+            },
+            "options": {}
+          },
+          "id": "route-response",
+          "name": "Route: By Source",
+          "type": "n8n-nodes-base.if",
+          "typeVersion": 2.2,
+          "position": [
+            2784,
+            272
+          ]
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "https://graph.microsoft.com/v1.0/me/messages",
+            "authentication": "genericCredentialType",
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={{ JSON.stringify({ subject: $json.emailSubject, body: { contentType: 'HTML', content: $json.emailHtml }, toRecipients: [{ emailAddress: { address: $env.OUTLOOK_MAILBOX || 'mark@thevortextrader.com' } }], importance: 'normal' }) }}",
+            "options": {},
+            "genericAuthType": "oAuth2Api",
+            "retryOnFail": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          },
+          "id": "outlook-create-draft",
+          "name": "Outlook: Create Draft",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.2,
+          "position": [
+            1184,
+            432
+          ],
+          "retryOnFail": true,
+          "maxTries": 3,
+          "waitBetweenTries": 3000,
+          "credentials": {
+            "oAuth2Api": {
+              "id": "wZWUkzbncn5Ti9dm",
+              "name": "Outlook Graph OAuth2"
+            }
+          }
+        },
+        {
+          "parameters": {
+            "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// TO DO: BUILD TASK \u2014 map enquiry data \u2192 MS To Do API payload\n// Runs in parallel with Route + Postgres after email is sent.\n// Uses $('Build Outlook Patch').first().json for normalised data\n// (HTTP Request nodes replace $json with API response).\n//\n// API: POST /me/todo/lists/{listId}/tasks\n// Docs: https://learn.microsoft.com/en-us/graph/api/todotasklist-post-tasks\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst data = $('Build Outlook Patch').first().json;\nconst client = data.client || {};\nconst enquiry = data.enquiry || {};\nconst intelligence = data.intelligence || {};\nconst cls = data.classification || 'IMPORTANT';\n\n// --- Importance mapping: Claude classification \u2192 To Do importance ---\n// To Do supports: low, normal, high\nconst importanceMap = {\n  'IMMEDIATE': 'high',\n  'IMPORTANT': 'normal',\n  'NOT_IMPORTANT': 'low',\n};\nconst importance = importanceMap[cls] || 'normal';\n\n// --- Task title ---\nconst destination = enquiry.destination || 'General';\nconst title = `[${cls}] ${client.name || 'Unknown'} \u2014 ${destination}`;\n\n// --- Description (plain text) ---\nconst descParts = [\n  `Name: ${client.name || 'N/A'}`,\n  `Email: ${client.email || 'N/A'}`,\n  `Phone: ${client.phone || 'Not provided'}`,\n  `Destination: ${destination}`,\n  `Travel Dates: ${enquiry.travel_dates || 'Flexible'}`,\n  `Duration: ${enquiry.duration || 'TBD'}`,\n  `Party: ${enquiry.adults || '?'} adults, ${enquiry.children || 0} children`,\n  `Budget: ${enquiry.budget || 'Not specified'}`,\n  `Experience: ${(enquiry.experience_type || []).join(', ') || 'Not specified'}`,\n  `Lead Score: ${intelligence.lead_score || 'N/A'}`,\n  `Booking Stage: ${intelligence.booking_stage || 'unknown'}`,\n  `Urgency: ${intelligence.urgency || 'unknown'}`,\n  `Classification: ${cls} (${data.classificationReason || 'N/A'})`,\n  `Source: ${data._source || 'unknown'}`,\n  '',\n  'Message:',\n  (enquiry.message || 'No message').substring(0, 1500),\n];\nconst description = descParts.join('\\n');\n\n// --- Due date: 3 business days from now for follow-up ---\nconst now = new Date();\nlet dueDate = new Date(now);\nlet addedDays = 0;\nwhile (addedDays < 3) {\n  dueDate.setDate(dueDate.getDate() + 1);\n  if (dueDate.getDay() !== 0 && dueDate.getDay() !== 6) addedDays++;\n}\n\n// --- Build the To Do task payload ---\nconst todoTask = {\n  title: title.substring(0, 255),\n  body: {\n    content: description,\n    contentType: 'text',\n  },\n  importance: importance,\n  status: 'notStarted',\n  dueDateTime: {\n    dateTime: dueDate.toISOString().replace('Z', ''),\n    timeZone: 'UTC',\n  },\n  categories: [cls],\n};\n\n// --- Build the API URL using the list ID from env ---\nconst listId = $env.TODO_LIST_ID;\nconst apiUrl = `https://graph.microsoft.com/v1.0/me/todo/lists/${listId}/tasks`;\n\nreturn [{\n  json: {\n    todoTask,\n    todoApiUrl: apiUrl,\n    todoMeta: {\n      clientEmail: client.email,\n      clientName: client.name,\n      classification: cls,\n      source: data._source,\n    },\n  }\n}];\n"
+          },
+          "id": "todo-build-task",
+          "name": "ToDo: Build Task",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [
+            2784,
+            640
+          ]
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "={{ $json.todoApiUrl }}",
+            "authentication": "genericCredentialType",
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={{ JSON.stringify($json.todoTask) }}",
+            "options": {
+              "timeout": 15000
+            },
+            "genericAuthType": "oAuth2Api"
+          },
+          "id": "todo-create-task",
+          "name": "ToDo: Create Task",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.2,
+          "position": [
+            3008,
+            640
+          ],
+          "retryOnFail": true,
+          "maxTries": 3,
+          "waitBetweenTries": 2000,
+          "onError": "continueRegularOutput",
+          "credentials": {
+            "oAuth2Api": {
+              "id": "wZWUkzbncn5Ti9dm",
+              "name": "Outlook Graph OAuth2"
+            }
+          }
+        }
+      ],
+      "connections": {
+        "Webhook: Website Enquiry": {
+          "main": [
+            [
+              {
+                "node": "Validate Input",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Webhook: Chatbot Lead": {
+          "main": [
+            [
+              {
+                "node": "Validate Input",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Validate Input": {
+          "main": [
+            [
+              {
+                "node": "Spam Filter",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Spam Filter": {
+          "main": [
+            [
+              {
+                "node": "Normalise Payload",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Normalise Payload": {
+          "main": [
+            [
+              {
+                "node": "Outlook: Create Draft",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Capture Message ID": {
+          "main": [
+            [
+              {
+                "node": "Claude: Classify Priority",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Claude: Classify Priority": {
+          "main": [
+            [
+              {
+                "node": "Parse Classification",
+                "type": "main",
+                "index": 0
+              }
+            ],
+            [
+              {
+                "node": "Claude Fallback (IMPORTANT)",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Parse Classification": {
+          "main": [
+            [
+              {
+                "node": "Build Outlook Patch",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Claude Fallback (IMPORTANT)": {
+          "main": [
+            [
+              {
+                "node": "Build Outlook Patch",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Build Outlook Patch": {
+          "main": [
+            [
+              {
+                "node": "Outlook: Apply Category + Flag",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Outlook: Apply Category + Flag": {
+          "main": [
+            [
+              {
+                "node": "Outlook: Send Email",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Outlook: Send Email": {
+          "main": [
+            [
+              {
+                "node": "Route: By Source",
+                "type": "main",
+                "index": 0
+              },
+              {
+                "node": "Postgres: Log Classification",
+                "type": "main",
+                "index": 0
+              },
+              {
+                "node": "ToDo: Build Task",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Route: By Source": {
+          "main": [
+            [
+              {
+                "node": "Respond to Webhook",
+                "type": "main",
+                "index": 0
+              }
+            ],
+            [
+              {
+                "node": "Chatbot: Complete",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Outlook: Create Draft": {
+          "main": [
+            [
+              {
+                "node": "Capture Message ID",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "ToDo: Build Task": {
+          "main": [
+            [
+              {
+                "node": "ToDo: Create Task",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Chatbot: Complete": {
+          "main": [
+            [
+              {
+                "node": "Respond to Webhook",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      },
+      "authors": "Mahlatini Admin",
+      "name": null,
+      "description": null,
+      "autosaved": false,
+      "workflowPublishHistory": [
+        {
+          "createdAt": "2026-02-15T20:50:29.568Z",
+          "id": 26,
+          "workflowId": "6g2SZsGNZiKpP01K",
+          "versionId": "b2469e2b-1535-4b3e-95c6-c4e15a0b0220",
+          "event": "activated",
+          "userId": "15c161a4-1e23-4320-8a24-a26a9570ef93"
+        }
+      ]
+    },
+    "scopes": [
+      "workflow:create",
+      "workflow:delete",
+      "workflow:execute",
+      "workflow:execute-chat",
+      "workflow:list",
+      "workflow:move",
+      "workflow:publish",
+      "workflow:read",
+      "workflow:share",
+      "workflow:update"
+    ],
+    "checksum": "f9f154c2a59370860b114f216ca346b6050984468311f273e04a705f65d2bfd3"
+  }
+}

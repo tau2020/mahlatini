@@ -1,0 +1,126 @@
+{
+  "name": "Power BI: KPI Pusher",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "scheduler-node",
+      "name": "Schedule: Every 30s",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  'kpi-snapshot' AS metric_id,\n  total_enquiries,\n  total_pipeline_value AS pipeline_value,\n  avg_lead_score,\n  avg_response_time_secs AS avg_response_time,\n  avg_classification_confidence AS avg_confidence,\n  avg_pax_total,\n  enquiries_last_hour AS enquiries_hour,\n  pipeline_last_hour AS pipeline_hour,\n  count_immediate,\n  count_important,\n  count_not_important,\n  count_website,\n  count_chatbot,\n  count_considering,\n  count_enquiring,\n  count_shortlisting,\n  last_updated_at AS last_updated\nFROM powerbi_realtime_kpis\nWHERE id = 1;",
+        "options": {}
+      },
+      "id": "postgres-query-kpis",
+      "name": "Postgres: Query KPIs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        460,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "GldFK4j9aQixrrxs",
+          "name": "PostgreSQL Mahlatini"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Transform PostgreSQL row to Power BI schema\nconst dbRow = $input.first().json;\n\n// Build Power BI payload matching the 18-field schema\nconst powerbiPayload = {\n  metricId: dbRow.metric_id,\n  totalEnquiries: parseInt(dbRow.total_enquiries || 0),\n  pipelineValue: parseFloat(dbRow.pipeline_value || 0),\n  avgLeadScore: parseFloat(dbRow.avg_lead_score || 0),\n  avgResponseTime: parseFloat(dbRow.avg_response_time || 0),\n  avgConfidence: parseFloat(dbRow.avg_confidence || 0),\n  avgPaxTotal: parseFloat(dbRow.avg_pax_total || 0),\n  enquiriesHour: parseInt(dbRow.enquiries_hour || 0),\n  pipelineHour: parseFloat(dbRow.pipeline_hour || 0),\n  countImmediate: parseInt(dbRow.count_immediate || 0),\n  countImportant: parseInt(dbRow.count_important || 0),\n  countNotImportant: parseInt(dbRow.count_not_important || 0),\n  countWebsite: parseInt(dbRow.count_website || 0),\n  countChatbot: parseInt(dbRow.count_chatbot || 0),\n  countConsidering: parseInt(dbRow.count_considering || 0),\n  countEnquiring: parseInt(dbRow.count_enquiring || 0),\n  countShortlisting: parseInt(dbRow.count_shortlisting || 0),\n  lastUpdated: new Date(dbRow.last_updated).toISOString()\n};\n\nconsole.log('Power BI KPI payload:', JSON.stringify(powerbiPayload, null, 2));\nreturn [{ json: powerbiPayload }];"
+      },
+      "id": "transform-to-powerbi",
+      "name": "Transform: Build Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.POWERBI_KPI_PUSH_URL }}",
+        "authentication": "none",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "=[{{ $json }}]",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "push-to-powerbi",
+      "name": "Power BI: Push KPIs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        300
+      ],
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Schedule: Every 30s": {
+      "main": [
+        [
+          {
+            "node": "Postgres: Query KPIs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres: Query KPIs": {
+      "main": [
+        [
+          {
+            "node": "Transform: Build Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform: Build Payload": {
+      "main": [
+        [
+          {
+            "node": "Power BI: Push KPIs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2026-02-16T15:45:00.000Z",
+  "versionId": "initial"
+}
