@@ -90,6 +90,7 @@ async def answer_query(
     category_filter: Optional[str] = None,
     destination_filter: Optional[str] = None,
     provider: Optional[str] = None,
+    collection_context: str = "",
 ) -> dict:
     """
     Full RAG pipeline: retrieve relevant context, then generate an answer.
@@ -100,6 +101,7 @@ async def answer_query(
         category_filter: Optional content category filter
         destination_filter: Optional destination filter
         provider: LLM provider to use ("groq" or "claude")
+        collection_context: Enquiry status injected into the prompt
 
     Returns:
         Dict with: reply, confidence, action, sources, provider
@@ -133,25 +135,31 @@ async def answer_query(
         context=context,
         history=history,
         question=question,
+        collection_context=collection_context,
     )
 
     # Step 4: Add caveat instruction if medium confidence
-    if action == "respond_with_caveat":
-        user_prompt += (
-            "\n\nNote: Your confidence in this information is moderate. "
-            "Briefly suggest the client confirm details with the team "
-            "at +27 213 002 325 or mahlatini.com/contact — but keep it natural, "
-            "not apologetic."
-        )
-    elif action == "escalate":
-        # Low confidence — generate a graceful handoff message
-        user_prompt = (
-            "You don't have enough information to answer this confidently. "
-            "Let the client know warmly and suggest they speak with "
-            "one of Mahlatini's travel experts for the best advice. "
-            "Keep it to 1-2 sentences.\n\n"
-            f"CLIENT: {question}"
-        )
+    # Skip escalation/caveat overrides when actively collecting enquiry details
+    # — the collection context already tells the LLM what to ask next.
+    is_collecting = collection_context and ("ENQUIRY STATUS" in collection_context and "exploring" not in collection_context.lower())
+
+    if not is_collecting:
+        if action == "respond_with_caveat":
+            user_prompt += (
+                "\n\nNote: Your confidence in this information is moderate. "
+                "Briefly suggest the client confirm details with the team "
+                "at +27 213 002 325 or mahlatini.com/contact — but keep it natural, "
+                "not apologetic."
+            )
+        elif action == "escalate":
+            # Low confidence — generate a graceful handoff message
+            user_prompt = (
+                "You don't have enough information to answer this confidently. "
+                "Let the client know warmly and suggest they speak with "
+                "one of Mahlatini's travel experts for the best advice. "
+                "Keep it to 1-2 sentences.\n\n"
+                f"CLIENT: {question}"
+            )
 
     # Step 5: Determine temperature and penalties
     if action == "respond":

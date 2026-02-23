@@ -7,10 +7,15 @@ Return ONLY valid JSON with no additional text.
   "urgency_reason": "string or null — explain if high/critical, e.g. 'Travel date within 7 days'",
   "booking_stage": "one of: browsing, considering, ready_to_book, booked_followup",
   "sentiment": "one of: positive, neutral, negative",
-  "requires_human": "boolean — true if bot cannot adequately handle this",
+  "requires_human": "boolean — true ONLY for complaints, callback requests, legal threats, or genuinely bizarre requests",
   "escalation_reason": "string or null — explain if requires_human is true",
   "detected_keywords": "array of relevant keywords from the message"
 }}
+
+RULES FOR requires_human:
+- TRUE only for: explicit callback/human requests, complaints, refund/cancellation demands, legal threats, or genuinely impossible/bizarre requests
+- FALSE for: pricing questions, booking intent, itinerary requests, destination queries, availability questions, budget discussions, general travel advice, sharing contact details
+- The bot handles ALL normal travel enquiries. Do NOT set requires_human just because the client wants to book or asks about pricing.
 
 LATEST MESSAGE: {message}
 

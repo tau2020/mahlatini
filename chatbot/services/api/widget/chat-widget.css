@@ -6,15 +6,16 @@
 :root {
   --mah-primary: #1a3a2a;
   --mah-primary-light: #2a5a3a;
+  --mah-primary-softer: #1f4233;
   --mah-accent: #c8a45e;
   --mah-accent-light: #d4b87a;
-  --mah-bg: #fafaf8;
+  --mah-bg: #faf9f6;
   --mah-surface: #ffffff;
   --mah-text: #1a1a1a;
   --mah-text-light: #6b6b6b;
   --mah-border: #e8e4df;
-  --mah-user-bubble: #1a3a2a;
-  --mah-bot-bubble: #f5f3ef;
+  --mah-user-bubble: #1f4233;
+  --mah-bot-bubble: #f7f5f1;
   --mah-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
   --mah-shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.18);
   --mah-radius: 16px;
@@ -44,7 +45,11 @@
   justify-content: center;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 99999;
-  animation: mah-pulse 3s infinite;
+  animation: mah-pulse 5s infinite;
+}
+
+.mah-chat-trigger.mah-pulsed {
+  animation: none;
 }
 
 .mah-chat-trigger:hover {
@@ -113,7 +118,7 @@
     var(--mah-primary-light) 100%
   );
   color: white;
-  padding: 18px 20px;
+  padding: 16px 20px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -124,12 +129,9 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.15);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
   flex-shrink: 0;
+  object-fit: cover;
+  border: 2px solid rgba(255, 255, 255, 0.3);
 }
 
 .mah-chat-header-info {
@@ -158,6 +160,11 @@
   background: #4ade80;
   display: inline-block;
   animation: mah-dot-pulse 2s infinite;
+  transition: background 0.3s ease;
+}
+
+.mah-status-dot.mah-dot-gold {
+  background: var(--mah-accent);
 }
 
 @keyframes mah-dot-pulse {
@@ -197,7 +204,7 @@
   padding: 16px 16px 8px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   scrollbar-width: thin;
   scrollbar-color: var(--mah-border) transparent;
 }
@@ -216,13 +223,13 @@
   display: flex;
   gap: 8px;
   max-width: 88%;
-  animation: mah-msg-in 0.3s ease-out;
+  animation: mah-msg-in 0.4s ease-out;
 }
 
 @keyframes mah-msg-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
@@ -244,51 +251,66 @@
   height: 30px;
   border-radius: 50%;
   flex-shrink: 0;
+  margin-top: 4px;
+  object-fit: cover;
+}
+
+.mah-message-avatar-user {
+  background: var(--mah-accent);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  margin-top: 4px;
-}
-
-.mah-message-bot .mah-message-avatar {
-  background: var(--mah-primary);
-  color: white;
 }
 
 .mah-message-bubble {
-  padding: 12px 16px;
-  border-radius: 14px;
-  line-height: 1.5;
-  font-size: 14px;
+  padding: 14px 18px;
+  border-radius: 18px;
+  line-height: 1.6;
+  font-size: 14.5px;
   word-wrap: break-word;
 }
 
 .mah-message-user .mah-message-bubble {
   background: var(--mah-user-bubble);
   color: white;
-  border-bottom-right-radius: 4px;
+  border-bottom-right-radius: 6px;
 }
 
 .mah-message-bot .mah-message-bubble {
   background: var(--mah-bot-bubble);
   color: var(--mah-text);
-  border-bottom-left-radius: 4px;
-  border: 1px solid var(--mah-border);
+  border-bottom-left-radius: 6px;
 }
 
 /* ─── Typing Indicator ───────────────────────────────── */
 
 .mah-typing {
   display: flex;
-  gap: 4px;
-  padding: 12px 16px;
-  background: var(--mah-bot-bubble);
-  border-radius: 14px;
-  border-bottom-left-radius: 4px;
-  border: 1px solid var(--mah-border);
-  width: fit-content;
+  align-items: center;
+  gap: 8px;
   align-self: flex-start;
+  animation: mah-msg-in 0.3s ease-out;
+}
+
+.mah-typing-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.mah-typing-dots {
+  display: flex;
+  gap: 4px;
+  padding: 14px 18px;
+  background: var(--mah-bot-bubble);
+  border-radius: 18px;
+  border-bottom-left-radius: 6px;
+  width: fit-content;
 }
 
 .mah-typing-dot {
@@ -296,9 +318,13 @@
   height: 7px;
   background: var(--mah-text-light);
   border-radius: 50%;
-  animation: mah-typing-bounce 1.4s infinite ease-in-out;
+  opacity: 0;
+  animation: mah-typing-appear 1.4s infinite ease-in-out;
 }
 
+.mah-typing-dot:nth-child(1) {
+  animation-delay: 0s;
+}
 .mah-typing-dot:nth-child(2) {
   animation-delay: 0.2s;
 }
@@ -306,16 +332,23 @@
   animation-delay: 0.4s;
 }
 
-@keyframes mah-typing-bounce {
-  0%,
+@keyframes mah-typing-appear {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  20% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1);
+  }
   80%,
   100% {
+    opacity: 0.3;
     transform: scale(0.7);
-    opacity: 0.4;
-  }
-  40% {
-    transform: scale(1);
-    opacity: 1;
   }
 }
 
@@ -342,13 +375,14 @@
   max-height: 100px;
   min-height: 40px;
   line-height: 1.4;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
   background: var(--mah-bg);
   color: var(--mah-text);
 }
 
 .mah-chat-input:focus {
   border-color: var(--mah-accent);
+  box-shadow: 0 0 0 3px rgba(200, 164, 94, 0.15);
 }
 
 .mah-chat-input::placeholder {
@@ -399,16 +433,24 @@
 }
 
 .mah-welcome-title {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 600;
   color: var(--mah-text);
   margin-bottom: 6px;
 }
 
 .mah-welcome-text {
-  font-size: 13px;
+  font-size: 14px;
+  color: var(--mah-text);
+  line-height: 1.6;
+}
+
+.mah-welcome-proof {
+  font-size: 11px;
   color: var(--mah-text-light);
-  line-height: 1.5;
+  margin-top: 10px;
+  opacity: 0.8;
+  line-height: 1.4;
 }
 
 /* ─── Quick Actions ──────────────────────────────────── */
@@ -421,13 +463,15 @@
 }
 
 .mah-quick-btn {
-  padding: 7px 14px;
+  padding: 10px 16px;
   border: 1px solid var(--mah-border);
-  border-radius: 20px;
-  background: var(--mah-surface);
+  border-left: 3px solid var(--mah-accent);
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f7f5f1, #faf9f6);
   color: var(--mah-primary);
-  font-size: 12px;
+  font-size: 13px;
   font-family: var(--mah-font);
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
   white-space: nowrap;
@@ -437,6 +481,30 @@
   background: var(--mah-primary);
   color: white;
   border-color: var(--mah-primary);
+  border-left-color: var(--mah-primary);
+}
+
+/* ─── Soft CTA (appears after 4+ messages) ───────────── */
+
+.mah-soft-cta {
+  text-align: center;
+  padding: 4px 16px 8px;
+  animation: mah-msg-in 0.5s ease-out;
+}
+
+.mah-soft-cta a {
+  font-size: 12px;
+  color: var(--mah-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  opacity: 0.75;
+  cursor: pointer;
+  font-family: var(--mah-font);
+  transition: opacity 0.2s;
+}
+
+.mah-soft-cta a:hover {
+  opacity: 1;
 }
 
 /* ─── Powered By ─────────────────────────────────────── */
@@ -460,6 +528,7 @@
     height: 100vh;
     max-height: 100vh;
     border-radius: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0);
   }
 
   .mah-chat-trigger {
@@ -468,40 +537,130 @@
     width: 56px;
     height: 56px;
   }
+
+  .mah-quick-actions {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 16px;
+  }
+
+  .mah-quick-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mah-chat-input {
+    padding: 12px 14px;
+  }
 }
 
-/* ─── Provider Toggle ──────────────────────────────── */
-.mah-provider-toggle {
+/* ─── Enquiry Progress Bar ─────────────────────────── */
+
+.mah-enquiry-progress {
+  padding: 10px 16px 8px;
+  background: var(--mah-bg);
+  border-bottom: 1px solid var(--mah-border);
+  transition: all 0.3s ease;
+}
+
+.mah-enquiry-progress.mah-hidden {
+  display: none;
+}
+
+.mah-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--mah-border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.mah-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--mah-accent), var(--mah-accent-light));
+  border-radius: 2px;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 0;
+}
+
+.mah-progress-text {
   display: flex;
-  gap: 4px;
-  margin-left: auto;
-  margin-right: 8px;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--mah-text-light);
+  font-family: var(--mah-font);
 }
 
-.mah-provider-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.3);
-  background: transparent;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 12px;
+.mah-progress-text .mah-progress-label {
+  font-weight: 500;
+}
+
+.mah-progress-text .mah-progress-pct {
   font-weight: 600;
+  color: var(--mah-accent);
+}
+
+/* ─── Confirmation Buttons ────────────────────────── */
+
+.mah-confirm-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px 12px;
+  justify-content: center;
+}
+
+.mah-confirm-btn {
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--mah-font);
   cursor: pointer;
   transition: all 0.2s ease;
+  border: none;
+  line-height: 1.2;
+}
+
+.mah-confirm-yes {
+  background: var(--mah-primary);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(26, 58, 42, 0.25);
+}
+
+.mah-confirm-yes:hover {
+  background: var(--mah-primary-light);
+  box-shadow: 0 4px 12px rgba(26, 58, 42, 0.35);
+  transform: translateY(-1px);
+}
+
+.mah-confirm-edit {
+  background: transparent;
+  color: var(--mah-primary);
+  border: 1.5px solid var(--mah-border);
+}
+
+.mah-confirm-edit:hover {
+  border-color: var(--mah-primary);
+  background: rgba(26, 58, 42, 0.04);
+}
+
+/* Submitted state — subtle success banner */
+.mah-submitted-banner {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 0;
+  gap: 8px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, rgba(26, 58, 42, 0.08), rgba(200, 164, 94, 0.08));
+  border-bottom: 1px solid var(--mah-border);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--mah-primary);
+  font-family: var(--mah-font);
 }
 
-.mah-provider-btn:hover {
-  border-color: rgba(255, 255, 255, 0.6);
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.mah-provider-btn.mah-provider-active {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: #c8a45e;
-  color: #fff;
+.mah-submitted-banner.mah-hidden {
+  display: none;
 }

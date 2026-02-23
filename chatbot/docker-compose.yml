@@ -24,6 +24,7 @@ services:
     env_file: .env
     volumes:
       - ./services/api/app:/app/app
+      - ./services/api/widget:/app/widget
       - ./config/prompts:/app/prompts:ro
     depends_on:
       postgres:

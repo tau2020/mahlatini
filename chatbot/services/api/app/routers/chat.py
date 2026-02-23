@@ -2,6 +2,14 @@
 Chat Router
 ============
 REST and WebSocket endpoints for the chat interface.
+
+Enquiry collection model:
+  EXPLORING  — general chat, no booking details yet
+  COLLECTING — actively gathering enquiry fields (1 per response)
+  CONFIRMING — all required fields filled, awaiting user confirmation
+  SUBMITTED  — enquiry sent to n8n, conversation continues informally
+
+Human escalation is restricted to complaints, callbacks, and legal threats.
 """
 
 import json
@@ -22,6 +30,13 @@ from app.services.classifier import classify_intent
 from app.services.lead_scorer import score_lead
 from app.services.llm import generate_json
 from app.services import n8n_client
+from app.services.enquiry_tracker import (
+    EnquiryPhase,
+    EnquiryState,
+    update_state,
+    build_collection_context,
+    build_progress,
+)
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -38,7 +53,7 @@ def _get_session(session_id: str) -> dict:
         _sessions[session_id] = {
             "conversation_id": str(uuid.uuid4()),
             "messages": [],
-            "booking_details": {},
+            "enquiry_state": EnquiryState(),
             "lead_scored": False,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -52,12 +67,51 @@ def _load_booking_prompt() -> str:
     return ""
 
 
+def _count_user_messages(messages: list[dict]) -> int:
+    """Count only user messages in the conversation."""
+    return sum(1 for m in messages if m.get("role") == "user")
+
+
+# ─── Confirmation Detection ──────────────────────────────
+
+CONFIRM_PATTERNS = {
+    "yes", "yeah", "yep", "correct", "that's right", "looks good",
+    "all good", "perfect", "go ahead", "submit", "send it",
+    "that's correct", "confirmed", "looks right", "that works",
+    "good to go", "please submit", "yes please",
+}
+
+CORRECTION_PATTERNS = {
+    "no", "not quite", "actually", "change", "wrong", "correction",
+    "update", "instead", "wait", "hold on", "let me correct",
+}
+
+
+def _detect_confirmation(message: str, state: EnquiryState) -> Optional[str]:
+    """
+    If in CONFIRMING phase, detect whether the user confirmed or corrected.
+    Returns: "confirmed", "corrected", or None (ambiguous — let LLM handle it)
+    """
+    if state.phase != EnquiryPhase.CONFIRMING:
+        return None
+
+    lower = message.lower().strip()
+
+    if any(p in lower for p in CONFIRM_PATTERNS):
+        return "confirmed"
+    if any(p in lower for p in CORRECTION_PATTERNS):
+        return "corrected"
+
+    return None
+
+
 # ─── REST endpoint ───────────────────────────────────────
 
 @router.post("/message", response_model=ChatMessageResponse)
 async def send_message(request: ChatMessageRequest):
     """Handle an incoming chat message via REST."""
     session = _get_session(request.session_id)
+    state = session["enquiry_state"]
 
     # Add user message to history
     session["messages"].append({
@@ -66,17 +120,66 @@ async def send_message(request: ChatMessageRequest):
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
-    # Classify intent (always uses default provider — fast, internal)
+    # Classify intent
     classification = await classify_intent(
         message=request.message,
         recent_context=session["messages"][-6:],
     )
 
-    # RAG-powered response using requested provider
+    # Check for confirmation before generating response
+    confirmation = _detect_confirmation(request.message, state)
+
+    if confirmation == "confirmed" and state.phase == EnquiryPhase.CONFIRMING:
+        # Submit the enquiry to n8n
+        lead_score = score_lead(
+            booking=state.booking,
+            booking_stage="ready_to_book",
+            message_count=len(session["messages"]),
+        )
+        try:
+            await n8n_client.send_new_enquiry(
+                conversation_id=session["conversation_id"],
+                session_id=request.session_id,
+                booking=state.booking,
+                classification=classification,
+                lead_score=lead_score,
+                conversation_summary=_summarise_conversation(session["messages"]),
+                source_page=request.source_page,
+            )
+            state.phase = EnquiryPhase.SUBMITTED
+            state.submitted = True
+            session["lead_scored"] = True
+
+            if lead_score.classification in ("vip", "high_value"):
+                await n8n_client.send_high_value_alert(
+                    conversation_id=session["conversation_id"],
+                    lead_score=lead_score,
+                    booking=state.booking,
+                )
+            logger.info(f"Enquiry submitted for session {request.session_id} (score={lead_score.total_score})")
+        except Exception as e:
+            logger.error(f"Failed to submit enquiry: {e}")
+
+    elif confirmation == "corrected":
+        # Go back to collecting — user wants to fix something
+        state.phase = EnquiryPhase.COLLECTING
+        state.confirmation_shown = False
+
+    # Extract/update booking state (unless already submitted)
+    if state.phase != EnquiryPhase.SUBMITTED and _count_user_messages(session["messages"]) >= 1:
+        booking = await _extract_booking(session["messages"])
+        if booking:
+            update_state(state, booking)
+
+    # Build collection context for the LLM
+    collection_context = build_collection_context(state)
+
+    # RAG-powered response with collection context
     rag_result = await answer_query(
         question=request.message,
         conversation_history=session["messages"][-settings.max_conversation_history:],
         provider=request.provider,
+        collection_context=collection_context,
     )
 
     reply = rag_result["reply"]
@@ -90,48 +193,7 @@ async def send_message(request: ChatMessageRequest):
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
-    # Check if we should extract booking details
-    lead_captured = False
-    booking_intents = {"booking_intent", "itinerary_request", "pricing_question"}
-    if (
-        classification.primary_intent in booking_intents
-        or classification.booking_stage in ("considering", "ready_to_book")
-        or len(session["messages"]) >= 6
-    ):
-        try:
-            booking = await _extract_booking(session["messages"])
-            if booking and (booking.destination or booking.contact_email):
-                lead_captured = True
-                lead_score = score_lead(
-                    booking=booking,
-                    booking_stage=classification.booking_stage,
-                    message_count=len(session["messages"]),
-                )
-
-                # Send to n8n if significant lead
-                if lead_score.total_score >= 40 and not session.get("lead_scored"):
-                    await n8n_client.send_new_enquiry(
-                        conversation_id=session["conversation_id"],
-                        session_id=request.session_id,
-                        booking=booking,
-                        classification=classification,
-                        lead_score=lead_score,
-                        conversation_summary=_summarise_conversation(session["messages"]),
-                        source_page=request.source_page,
-                    )
-                    session["lead_scored"] = True
-
-                    # High-value alert
-                    if lead_score.classification in ("vip", "high_value"):
-                        await n8n_client.send_high_value_alert(
-                            conversation_id=session["conversation_id"],
-                            lead_score=lead_score,
-                            booking=booking,
-                        )
-        except Exception as e:
-            logger.warning(f"Booking extraction failed: {e}")
-
-    # Handle escalation
+    # Handle escalation (only complaints/callbacks)
     if classification.requires_human:
         await n8n_client.send_escalation(
             conversation_id=session["conversation_id"],
@@ -145,8 +207,9 @@ async def send_message(request: ChatMessageRequest):
         confidence=confidence,
         intent=classification.primary_intent,
         requires_human=classification.requires_human,
-        lead_captured=lead_captured,
+        lead_captured=state.submitted,
         provider=provider_used,
+        enquiry_progress=build_progress(state),
     )
 
 
@@ -173,8 +236,8 @@ async def websocket_chat(
             if not user_message:
                 continue
 
-            # Allow per-message provider override from payload
             msg_provider = message_data.get("provider", provider)
+            state = session["enquiry_state"]
 
             session["messages"].append({
                 "role": "user",
@@ -191,11 +254,62 @@ async def websocket_chat(
                 recent_context=session["messages"][-6:],
             )
 
-            # Generate response via selected provider
+            # Check for confirmation
+            confirmation = _detect_confirmation(user_message, state)
+
+            if confirmation == "confirmed" and state.phase == EnquiryPhase.CONFIRMING:
+                lead_score = score_lead(
+                    booking=state.booking,
+                    booking_stage="ready_to_book",
+                    message_count=len(session["messages"]),
+                )
+                try:
+                    source_page = message_data.get("source_page", "")
+                    await n8n_client.send_new_enquiry(
+                        conversation_id=session["conversation_id"],
+                        session_id=session_id,
+                        booking=state.booking,
+                        classification=classification,
+                        lead_score=lead_score,
+                        conversation_summary=_summarise_conversation(session["messages"]),
+                        source_page=source_page,
+                    )
+                    state.phase = EnquiryPhase.SUBMITTED
+                    state.submitted = True
+                    session["lead_scored"] = True
+
+                    if lead_score.classification in ("vip", "high_value"):
+                        await n8n_client.send_high_value_alert(
+                            conversation_id=session["conversation_id"],
+                            lead_score=lead_score,
+                            booking=state.booking,
+                        )
+                    logger.info(f"WS enquiry submitted for session {session_id}")
+                except Exception as e:
+                    logger.error(f"WS enquiry submission failed: {e}")
+
+            elif confirmation == "corrected":
+                state.phase = EnquiryPhase.COLLECTING
+                state.confirmation_shown = False
+
+            # Extract/update booking state
+            if state.phase != EnquiryPhase.SUBMITTED and _count_user_messages(session["messages"]) >= 1:
+                try:
+                    booking = await _extract_booking(session["messages"])
+                    if booking:
+                        update_state(state, booking)
+                except Exception as e:
+                    logger.warning(f"WS booking extraction failed: {e}")
+
+            # Build collection context
+            collection_context = build_collection_context(state)
+
+            # Generate response with collection context
             rag_result = await answer_query(
                 question=user_message,
                 conversation_history=session["messages"][-settings.max_conversation_history:],
                 provider=msg_provider,
+                collection_context=collection_context,
             )
 
             reply = rag_result["reply"]
@@ -206,7 +320,7 @@ async def websocket_chat(
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             })
 
-            # Send response
+            # Send response with progress
             await websocket.send_json({
                 "type": "message",
                 "reply": reply,
@@ -214,7 +328,16 @@ async def websocket_chat(
                 "intent": classification.primary_intent,
                 "requires_human": classification.requires_human,
                 "provider": rag_result["provider"],
+                "enquiry_progress": build_progress(state),
             })
+
+            # Handle escalation
+            if classification.requires_human:
+                await n8n_client.send_escalation(
+                    conversation_id=session["conversation_id"],
+                    reason=classification.escalation_reason or "Human requested",
+                    classification=classification,
+                )
 
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected: {session_id}")
@@ -248,10 +371,6 @@ async def _extract_booking(messages: list[dict]) -> BookingDetails | None:
 
     if not result:
         return None
-
-    # Parse dates if present
-    travel_dates = result.get("travel_dates", {})
-    budget = result.get("budget_range", {})
 
     return BookingDetails(
         destination=result.get("destination"),

@@ -104,3 +104,12 @@ async def serve_enquiry_form_js():
     if js_path.exists():
         return FileResponse(js_path, media_type="application/javascript")
     return {"error": "Enquiry form widget not found"}
+
+
+@router.get("/widget/sarah-avatar.png")
+async def serve_avatar():
+    """Serve the chatbot avatar image."""
+    img_path = WIDGET_DIR / "sarah-avatar.png"
+    if img_path.exists():
+        return FileResponse(img_path, media_type="image/png")
+    return {"error": "Avatar not found"}

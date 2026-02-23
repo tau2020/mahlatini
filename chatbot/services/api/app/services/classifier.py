@@ -2,6 +2,11 @@
 Intent Classifier
 =================
 Classifies user messages for intent, urgency, sentiment, and escalation needs.
+
+Escalation philosophy: The bot should handle pricing questions, destination
+queries, and general travel advice itself. Only escalate for complaints,
+explicit human requests, urgent travel, or confirmed booking intent with
+sufficient detail.
 """
 
 import json
@@ -23,15 +28,17 @@ def _load_prompt() -> str:
     return ""
 
 
-# Keywords that trigger specific classifications without LLM
+# Keywords that trigger specific classifications without LLM.
+# Note: pricing/budget keywords are intentionally excluded — the bot
+# should answer pricing questions itself, not escalate.
+
 ESCALATION_KEYWORDS = {
     "complaint", "disappointed", "terrible", "disgusting", "unacceptable",
     "refund", "cancel", "sue", "lawyer", "legal",
 }
 
 BOOKING_KEYWORDS = {
-    "book", "reserve", "booking", "reservation", "quote", "price",
-    "cost", "budget", "availability", "available",
+    "book", "reserve", "booking", "reservation",
 }
 
 URGENT_KEYWORDS = {
@@ -128,14 +135,31 @@ async def classify_intent(
             temperature=0.1,
         )
 
+        # Post-processing: prevent false escalations from the LLM.
+        # Only allow requires_human for genuine complaint/callback/legal reasons.
+        requires_human = result.get("requires_human", False)
+        escalation_reason = result.get("escalation_reason")
+        if requires_human:
+            intent = result.get("primary_intent", "")
+            reason_lower = (escalation_reason or "").lower()
+            allowed_intents = {"complaint", "callback_request"}
+            allowed_keywords = {
+                "complaint", "callback", "refund", "cancel",
+                "legal", "lawyer", "human", "speak to", "bizarre",
+            }
+            if (intent not in allowed_intents and
+                    not any(kw in reason_lower for kw in allowed_keywords)):
+                requires_human = False
+                escalation_reason = None
+
         return IntentClassification(
             primary_intent=result.get("primary_intent", "general_enquiry"),
             urgency=result.get("urgency", "low"),
             urgency_reason=result.get("urgency_reason"),
             booking_stage=result.get("booking_stage", "browsing"),
             sentiment=result.get("sentiment", "neutral"),
-            requires_human=result.get("requires_human", False),
-            escalation_reason=result.get("escalation_reason"),
+            requires_human=requires_human,
+            escalation_reason=escalation_reason,
             detected_keywords=result.get("detected_keywords", []),
         )
     except Exception as e:

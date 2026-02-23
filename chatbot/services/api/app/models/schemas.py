@@ -27,6 +27,7 @@ class ChatMessageResponse(BaseModel):
     requires_human: bool = False
     lead_captured: bool = False
     provider: Optional[str] = None
+    enquiry_progress: Optional[dict] = None
 
 
 class ConversationMessage(BaseModel):

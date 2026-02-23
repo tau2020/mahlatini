@@ -7,10 +7,6 @@
  *   <script src="https://chat.mahlatini.com/widget/chat-widget.js"
  *           data-api-url="https://chat.mahlatini.com"
  *           defer></script>
- *
- * Optional attributes:
- *   data-provider="groq"    — default LLM provider ("groq" or "claude")
- *   data-show-toggle="true" — show provider toggle in header
  */
 
 (function () {
@@ -25,12 +21,15 @@
   const WS_URL = API_URL.replace(/^http/, "ws");
   const SESSION_KEY = "mah_chat_session";
   const CSS_URL = `${API_URL}/widget/chat-widget.css`;
+  const AVATAR_URL = `${API_URL}/widget/sarah-avatar.png`;
 
   // Provider config
-  let currentProvider =
-    (scriptTag && scriptTag.getAttribute("data-provider")) || "groq";
-  const showToggle =
-    (scriptTag && scriptTag.getAttribute("data-show-toggle")) === "true";
+  let currentProvider = "claude";
+
+  // Conversation state
+  let messageCount = 0;
+  let hasOpenedBefore = false;
+  let enquiryProgress = null;
 
   // ─── Session Management ─────────────────────────────
   function getSessionId() {
@@ -83,56 +82,56 @@
       </svg>
     `;
 
-    // Provider toggle HTML (only if enabled)
-    const toggleHTML = showToggle
-      ? `<div class="mah-provider-toggle" id="mah-provider-toggle">
-           <button class="mah-provider-btn ${currentProvider === "groq" ? "mah-provider-active" : ""}"
-                   data-provider="groq" title="Groq (Llama)">A</button>
-           <button class="mah-provider-btn ${currentProvider === "claude" ? "mah-provider-active" : ""}"
-                   data-provider="claude" title="Claude">B</button>
-         </div>`
-      : "";
-
     // Chat container
     const container = document.createElement("div");
     container.className = "mah-chat-container";
     container.id = "mah-chat-container";
     container.innerHTML = `
       <div class="mah-chat-header">
-        <div class="mah-chat-header-avatar">🌍</div>
+        <img class="mah-chat-header-avatar" src="${AVATAR_URL}" alt="Sarah" />
         <div class="mah-chat-header-info">
-          <div class="mah-chat-header-title">Mahlatini Travel Concierge</div>
-          <div class="mah-chat-header-status">
-            <span class="mah-status-dot"></span> Online — ready to help
+          <div class="mah-chat-header-title">Sarah: AI Travel Advisor</div>
+          <div class="mah-chat-header-status" id="mah-header-status">
+            <span class="mah-status-dot" id="mah-status-dot"></span>
+            <span id="mah-status-text">Typically replies in seconds</span>
           </div>
         </div>
-        ${toggleHTML}
         <button class="mah-chat-header-close" id="mah-chat-close" aria-label="Close chat">✕</button>
+      </div>
+
+      <div class="mah-enquiry-progress" id="mah-enquiry-progress" style="display: none;">
+        <div class="mah-progress-bar">
+          <div class="mah-progress-fill" id="mah-progress-fill"></div>
+        </div>
+        <div class="mah-progress-text" id="mah-progress-text"></div>
       </div>
 
       <div class="mah-chat-messages" id="mah-chat-messages">
         <div class="mah-welcome">
-          <div class="mah-welcome-icon">✨</div>
-          <div class="mah-welcome-title">Welcome to Mahlatini</div>
+          <div class="mah-welcome-title">Mahlatini Travel</div>
           <div class="mah-welcome-text">
-            I'm your AI travel concierge. Ask me about safaris, beach holidays,
-            honeymoons, and luxury travel across Africa, Indian Ocean, and beyond.
+            I know 300+ safari lodges and beach retreats across Africa and the Indian Ocean.<br>
+            What kind of trip are you dreaming about?
+          </div>
+          <div class="mah-welcome-proof">
+            Trusted by 2,000+ travellers since 2002
           </div>
         </div>
       </div>
 
       <div class="mah-quick-actions" id="mah-quick-actions">
-        <button class="mah-quick-btn" data-msg="What destinations do you recommend for a first-time safari?">🦁 Safari Ideas</button>
-        <button class="mah-quick-btn" data-msg="Tell me about honeymoon destinations">💍 Honeymoons</button>
-        <button class="mah-quick-btn" data-msg="What are your best family holiday options?">👨‍👩‍👧‍👦 Family Holidays</button>
-        <button class="mah-quick-btn" data-msg="I'd like a beach and safari combination">🏖️ Beach & Safari</button>
+        <button class="mah-quick-btn" data-msg="I've never been on safari before — where should I start?">Plan my first safari</button>
+        <button class="mah-quick-btn" data-msg="We're planning our honeymoon and want something unforgettable — what do you suggest?">Surprise honeymoon ideas</button>
+        <button class="mah-quick-btn" data-msg="We have young kids — what are the best family-friendly safari options?">Travelling with kids</button>
+        <button class="mah-quick-btn" data-msg="I'd love to combine a safari with beach time — what's the best way to do that?">Beach + bush combo</button>
+        <button class="mah-quick-btn" data-msg="I'm not sure where to go yet — can you help me figure out what's right for us?">Help me choose</button>
       </div>
 
       <div class="mah-chat-input-area">
         <textarea
           class="mah-chat-input"
           id="mah-chat-input"
-          placeholder="Ask about destinations, experiences..."
+          placeholder="Tell me about your dream trip..."
           rows="1"
           maxlength="4000"
         ></textarea>
@@ -166,7 +165,23 @@
       const input = document.getElementById("mah-chat-input");
       setTimeout(() => input && input.focus(), 350);
       connectWebSocket();
+
+      // Stop pulse after first open
+      if (!hasOpenedBefore) {
+        hasOpenedBefore = true;
+        trigger.classList.add("mah-pulsed");
+      }
+
+      // Update status to "Active now"
+      updateStatus("Active now", false);
     }
+  }
+
+  function updateStatus(text, isGold) {
+    const statusText = document.getElementById("mah-status-text");
+    const statusDot = document.getElementById("mah-status-dot");
+    if (statusText) statusText.textContent = text;
+    if (statusDot) statusDot.classList.toggle("mah-dot-gold", isGold);
   }
 
   function addMessage(content, role) {
@@ -179,14 +194,17 @@
       if (qa) qa.remove();
     }
 
+    messageCount++;
+
     const msgDiv = document.createElement("div");
     msgDiv.className = `mah-message mah-message-${role}`;
 
-    const avatarContent = role === "bot" ? "🌍" : "";
-    const avatarHTML =
-      role === "bot"
-        ? `<div class="mah-message-avatar">${avatarContent}</div>`
-        : "";
+    let avatarHTML;
+    if (role === "bot") {
+      avatarHTML = `<img class="mah-message-avatar" src="${AVATAR_URL}" alt="Sarah" />`;
+    } else {
+      avatarHTML = '<div class="mah-message-avatar mah-message-avatar-user">You</div>';
+    }
 
     msgDiv.innerHTML = `
       ${avatarHTML}
@@ -197,6 +215,80 @@
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
+  // ─── Enquiry Progress ─────────────────────────────
+  function updateProgressBar(progress) {
+    const container = document.getElementById("mah-enquiry-progress");
+    const fill = document.getElementById("mah-progress-fill");
+    const text = document.getElementById("mah-progress-text");
+    if (!container || !fill || !text) return;
+
+    enquiryProgress = progress;
+
+    // Hide during exploring and after submission
+    if (progress.phase === "exploring" || progress.phase === "submitted") {
+      container.style.display = "none";
+
+      if (progress.phase === "submitted") {
+        updateStatus("Enquiry submitted", true);
+      }
+      return;
+    }
+
+    // Show during collecting and confirming
+    container.style.display = "block";
+    fill.style.width = progress.percentage + "%";
+
+    if (progress.phase === "confirming") {
+      text.textContent = "Ready to submit your enquiry";
+      fill.style.width = "100%";
+    } else {
+      const remaining = progress.total_required - progress.filled_count;
+      if (remaining === 1) {
+        text.textContent = "Just 1 more detail needed";
+      } else if (remaining > 1) {
+        text.textContent = remaining + " details to go";
+      } else {
+        text.textContent = "Collecting your trip details...";
+      }
+    }
+  }
+
+  function showConfirmationButtons() {
+    const messagesEl = document.getElementById("mah-chat-messages");
+    if (!messagesEl) return;
+
+    // Don't show if already present
+    if (document.getElementById("mah-confirm-actions")) return;
+
+    const actionsDiv = document.createElement("div");
+    actionsDiv.className = "mah-confirm-actions";
+    actionsDiv.id = "mah-confirm-actions";
+    actionsDiv.innerHTML = `
+      <button class="mah-confirm-btn mah-confirm-yes">Yes, submit my enquiry</button>
+      <button class="mah-confirm-btn mah-confirm-edit">I need to change something</button>
+    `;
+
+    messagesEl.appendChild(actionsDiv);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    actionsDiv.querySelector(".mah-confirm-yes").addEventListener("click", () => {
+      sendMessage("Yes, that's all correct — please submit it");
+      actionsDiv.remove();
+    });
+
+    actionsDiv.querySelector(".mah-confirm-edit").addEventListener("click", () => {
+      sendMessage("Actually, let me correct something");
+      actionsDiv.remove();
+    });
+  }
+
+  function handleEnquiryProgress(data) {
+    if (data.enquiry_progress) {
+      updateProgressBar(data.enquiry_progress);
+    }
+  }
+
+  // ─── Typing Indicator ─────────────────────────────
   function showTyping() {
     if (isTyping) return;
     isTyping = true;
@@ -208,9 +300,12 @@
     typingDiv.className = "mah-typing";
     typingDiv.id = "mah-typing-indicator";
     typingDiv.innerHTML = `
-      <div class="mah-typing-dot"></div>
-      <div class="mah-typing-dot"></div>
-      <div class="mah-typing-dot"></div>
+      <img class="mah-typing-avatar" src="${AVATAR_URL}" alt="Sarah" />
+      <div class="mah-typing-dots">
+        <div class="mah-typing-dot"></div>
+        <div class="mah-typing-dot"></div>
+        <div class="mah-typing-dot"></div>
+      </div>
     `;
 
     messagesEl.appendChild(typingDiv);
@@ -227,26 +322,6 @@
     const div = document.createElement("div");
     div.appendChild(document.createTextNode(str));
     return div.innerHTML;
-  }
-
-  // ─── Provider Toggle ────────────────────────────────
-  function switchProvider(newProvider) {
-    currentProvider = newProvider;
-
-    // Update toggle button styles
-    document.querySelectorAll(".mah-provider-btn").forEach((btn) => {
-      btn.classList.toggle(
-        "mah-provider-active",
-        btn.getAttribute("data-provider") === newProvider,
-      );
-    });
-
-    // Reconnect WebSocket with new provider
-    if (ws) {
-      ws.close();
-      ws = null;
-    }
-    connectWebSocket();
   }
 
   // ─── WebSocket Connection ──────────────────────────
@@ -275,17 +350,22 @@
         if (data.type === "message") {
           isSending = false;
           hideTyping();
-          addMessage(data.reply, "bot");
 
-          if (data.requires_human) {
-            setTimeout(() => {
-              addMessage(
-                "I've flagged this conversation for one of our travel experts. " +
-                  "They'll be in touch shortly. In the meantime, feel free to keep chatting!",
-                "bot",
-              );
-            }, 500);
-          }
+          // Update enquiry progress
+          handleEnquiryProgress(data);
+
+          // Brief pause after typing stops — feels more human
+          setTimeout(() => {
+            addMessage(data.reply, "bot");
+
+            // Show confirmation buttons if in confirming phase
+            if (
+              data.enquiry_progress &&
+              data.enquiry_progress.phase === "confirming"
+            ) {
+              setTimeout(() => showConfirmationButtons(), 400);
+            }
+          }, 300);
         }
       };
 
@@ -309,6 +389,10 @@
     isSending = true;
     addMessage(text, "user");
 
+    // Remove confirmation buttons if present
+    const confirmEl = document.getElementById("mah-confirm-actions");
+    if (confirmEl) confirmEl.remove();
+
     const input = document.getElementById("mah-chat-input");
     const sendBtn = document.getElementById("mah-chat-send");
     if (input) input.value = "";
@@ -326,7 +410,6 @@
         }),
       );
       if (sendBtn) sendBtn.disabled = false;
-      // isSending is cleared when ws.onmessage receives the response
       return;
     }
 
@@ -348,22 +431,27 @@
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
       const data = await response.json();
-      addMessage(data.reply, "bot");
 
-      if (data.requires_human) {
-        setTimeout(() => {
-          addMessage(
-            "I've flagged this conversation for one of our travel experts. " +
-              "They'll be in touch shortly!",
-            "bot",
-          );
-        }, 500);
-      }
+      // Update enquiry progress
+      handleEnquiryProgress(data);
+
+      // Brief pause after response arrives
+      setTimeout(() => {
+        addMessage(data.reply, "bot");
+
+        // Show confirmation buttons if in confirming phase
+        if (
+          data.enquiry_progress &&
+          data.enquiry_progress.phase === "confirming"
+        ) {
+          setTimeout(() => showConfirmationButtons(), 400);
+        }
+      }, 300);
     } catch (err) {
       hideTyping();
       addMessage(
         "I'm having trouble connecting right now. Please try again, " +
-          "or contact us directly at +27 213 002 325.",
+          "or reach us directly at +27 213 002 325.",
         "bot",
       );
     } finally {
@@ -420,18 +508,6 @@
         if (msg) sendMessage(msg);
       });
     });
-
-    // Provider toggle buttons
-    if (showToggle) {
-      document.querySelectorAll(".mah-provider-btn").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const provider = btn.getAttribute("data-provider");
-          if (provider && provider !== currentProvider) {
-            switchProvider(provider);
-          }
-        });
-      });
-    }
   }
 
   // Start when DOM is ready
