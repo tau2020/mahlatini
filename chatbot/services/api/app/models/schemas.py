@@ -105,6 +105,26 @@ class EnquiryWebhookPayload(BaseModel):
     conversation_summary: str
 
 
+# ─── n8n Callback (n8n → chatbot push) ───────────────────
+
+class N8nCallbackRequest(BaseModel):
+    """Incoming message pushed from n8n back to a chat session."""
+    session_id: str = Field(..., min_length=1)
+    conversation_id: str = Field(..., min_length=1)
+    message: str = Field(..., min_length=1)
+    message_type: str = Field(
+        default="notification",
+        pattern="^(notification|escalation_update|itinerary|agent_assigned)$",
+    )
+    metadata: Optional[dict] = None
+
+
+class N8nCallbackResponse(BaseModel):
+    """Acknowledgement returned to n8n after queuing a callback."""
+    status: str  # "queued"
+    session_id: str
+
+
 # ─── Admin ────────────────────────────────────────────────
 
 class KnowledgeBaseStats(BaseModel):

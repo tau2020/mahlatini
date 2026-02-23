@@ -116,19 +116,49 @@
       payload.hmac_signature = await hmacSign(payload, WEBHOOK_SECRET);
     }
 
-    // Send
-    const response = await fetch(WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    // Send with retry (max 2 attempts) and timeout
+    const MAX_ATTEMPTS = 2;
+    let lastError;
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      throw new Error('Submission failed (' + response.status + '): ' + text.substring(0, 200));
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+        const response = await fetch(WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          return response.json();
+        }
+
+        const text = await response.text().catch(() => '');
+        lastError = new Error('Submission failed (' + response.status + '): ' + text.substring(0, 200));
+
+        // Retry on server errors only
+        if (response.status >= 500 && attempt < MAX_ATTEMPTS) {
+          await new Promise(r => setTimeout(r, 1000 * attempt));
+          continue;
+        }
+        throw lastError;
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          lastError = new Error('Request timed out. Please check your connection and try again.');
+        } else {
+          lastError = err;
+        }
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise(r => setTimeout(r, 1000 * attempt));
+          continue;
+        }
+      }
     }
-
-    return response.json();
+    throw lastError;
   }
 
   // --- Auto-bind to forms with [data-mahlatini-enquiry] ---

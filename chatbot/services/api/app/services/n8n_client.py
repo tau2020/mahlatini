@@ -25,8 +25,37 @@ MAX_RETRIES = 3
 RETRY_BACKOFF_BASE = 2  # seconds
 
 
+# ─── Dead-letter queue ───────────────────────────────────
+
+async def _queue_failed_webhook(path: str, payload: dict) -> None:
+    """Store a failed webhook payload in Redis for later retry.
+
+    Falls back to logging if Redis is unavailable — never raises.
+    """
+    try:
+        import redis.asyncio as aioredis
+
+        r = aioredis.from_url(settings.redis_url, decode_responses=True)
+        entry = json.dumps({
+            "path": path,
+            "payload": payload,
+            "failed_at": datetime.now(timezone.utc).isoformat(),
+        })
+        await r.lpush("n8n:dead_letter", entry)
+        await r.close()
+        logger.info(f"Queued failed webhook to dead-letter: {path}")
+    except Exception as e:
+        logger.error(f"Dead-letter queue write failed ({path}): {e}")
+
+
+# ─── Core webhook sender ─────────────────────────────────
+
 async def _send_webhook(path: str, payload: dict, retries: int = MAX_RETRIES) -> bool:
-    """Send a POST request to an n8n webhook endpoint with retry logic."""
+    """Send a POST request to an n8n webhook endpoint with retry logic.
+
+    On permanent failure the payload is pushed to a Redis dead-letter queue
+    so it can be retried later.
+    """
     url = f"{settings.n8n_base_url}{path}"
     for attempt in range(1, retries + 1):
         try:
@@ -47,6 +76,7 @@ async def _send_webhook(path: str, payload: dict, retries: int = MAX_RETRIES) ->
                     logger.warning(
                         f"Webhook {path} returned {response.status_code}: {response.text[:200]}"
                     )
+                    await _queue_failed_webhook(path, payload)
                     return False
         except httpx.TimeoutException:
             if attempt < retries:
@@ -55,11 +85,42 @@ async def _send_webhook(path: str, payload: dict, retries: int = MAX_RETRIES) ->
                 await asyncio.sleep(wait)
             else:
                 logger.error(f"Webhook {path} timed out after {retries} attempts")
+                await _queue_failed_webhook(path, payload)
                 return False
         except Exception as e:
             logger.error(f"Webhook {path} failed: {e}")
+            await _queue_failed_webhook(path, payload)
             return False
     return False
+
+
+# ─── Sub-workflow execution ──────────────────────────────
+
+async def execute_subworkflow(
+    path: str,
+    payload: dict,
+    timeout: float = 10.0,
+) -> Optional[dict]:
+    """Call an n8n sub-workflow webhook and return its JSON response.
+
+    Unlike _send_webhook (fire-and-forget), this waits for a synchronous
+    response — useful for availability checks, pricing lookups, etc.
+    Returns None on any failure.
+    """
+    url = f"{settings.n8n_base_url}{path}"
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=5.0)) as client:
+            response = await client.post(url, json=payload)
+            if response.status_code in (200, 201):
+                return response.json()
+            logger.warning(f"Sub-workflow {path} returned {response.status_code}: {response.text[:200]}")
+            return None
+    except httpx.TimeoutException:
+        logger.warning(f"Sub-workflow {path} timed out after {timeout}s")
+        return None
+    except Exception as e:
+        logger.error(f"Sub-workflow {path} failed: {e}")
+        return None
 
 
 def _sign_payload(payload: dict) -> str:
@@ -191,7 +252,7 @@ async def send_booking_update(
 
 
 async def forward_website_enquiry(form_data: dict, metadata: Optional[dict] = None) -> bool:
-    """Forward a website form enquiry directly to n8n for Outlook + Gemini processing.
+    """Forward a website form enquiry directly to n8n for Outlook + Claude classification.
 
     Use this when the FastAPI backend receives a form submission that should
     bypass the chatbot pipeline and go straight to the n8n automation workflow.

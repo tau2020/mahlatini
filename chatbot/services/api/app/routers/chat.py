@@ -12,18 +12,22 @@ Enquiry collection model:
 Human escalation is restricted to complaints, callbacks, and legal threats.
 """
 
+import hashlib
+import hmac as hmac_mod
 import json
 import uuid
 import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Query, Request
 
 from app.models.schemas import (
     ChatMessageRequest,
     ChatMessageResponse,
     BookingDetails,
+    N8nCallbackRequest,
+    N8nCallbackResponse,
 )
 from app.services.rag import answer_query
 from app.services.classifier import classify_intent
@@ -45,6 +49,9 @@ router = APIRouter(prefix="/api/chat", tags=["Chat"])
 
 # ─── In-memory session store (use Redis in production) ────
 _sessions: dict[str, dict] = {}
+
+# ─── Pending messages pushed from n8n (per session) ──────
+_n8n_pending: dict[str, list[dict]] = {}
 
 
 def _get_session(session_id: str) -> dict:
@@ -103,6 +110,89 @@ def _detect_confirmation(message: str, state: EnquiryState) -> Optional[str]:
         return "corrected"
 
     return None
+
+
+# ─── HMAC verification for n8n callbacks ─────────────────
+
+def _verify_hmac(body: bytes, signature: str) -> bool:
+    """Verify an HMAC-SHA256 signature from n8n.
+
+    If no webhook secret is configured, accept all requests (open mode).
+    """
+    secret = settings.n8n_webhook_secret
+    if not secret:
+        return True  # No secret configured — accept everything
+    if not signature:
+        return False  # Secret configured but no signature provided
+
+    expected = "sha256=" + hmac_mod.new(
+        secret.encode(), body, hashlib.sha256
+    ).hexdigest()
+    return hmac_mod.compare_digest(expected, signature)
+
+
+# ─── Shared lead-capture helper ──────────────────────────
+
+# Intents that warrant booking extraction
+_BOOKING_INTENTS = {
+    "booking_intent", "enquiry", "booking", "travel_planning",
+    "general_enquiry", "destination_enquiry",
+}
+_MIN_MESSAGES_FOR_EXTRACTION = 5  # trigger on message count alone
+
+
+async def _process_lead_capture(
+    session: dict,
+    session_id: str,
+    classification,
+    source_page: Optional[str] = None,
+) -> bool:
+    """Extract booking details, score the lead, and push to n8n if qualified.
+
+    Returns True if a booking was extracted (regardless of score),
+    False if extraction was skipped or yielded nothing.
+    """
+    if session["lead_scored"]:
+        return False
+
+    user_msg_count = sum(1 for m in session["messages"] if m.get("role") == "user")
+    intent_relevant = classification.primary_intent in _BOOKING_INTENTS
+    count_trigger = user_msg_count >= _MIN_MESSAGES_FOR_EXTRACTION
+
+    if not intent_relevant and not count_trigger:
+        return False
+
+    booking = await _extract_booking(session["messages"])
+    if not booking:
+        return False
+
+    lead = score_lead(
+        booking=booking,
+        booking_stage=classification.booking_stage,
+        message_count=len(session["messages"]),
+    )
+
+    # Only push to n8n if score is high enough (≥40) and has contact info
+    if lead.total_score >= 40 and booking.contact_email:
+        await n8n_client.send_new_enquiry(
+            conversation_id=session["conversation_id"],
+            session_id=session_id,
+            booking=booking,
+            classification=classification,
+            lead_score=lead,
+            conversation_summary=_summarise_conversation(session["messages"]),
+            source_page=source_page,
+        )
+        session["lead_scored"] = True
+
+        if lead.classification in ("vip", "high_value"):
+            await n8n_client.send_high_value_alert(
+                conversation_id=session["conversation_id"],
+                lead_score=lead,
+                booking=booking,
+            )
+
+    return True
 
 
 # ─── REST endpoint ───────────────────────────────────────
@@ -347,6 +437,52 @@ async def websocket_chat(
             await websocket.close()
         except Exception:
             pass
+
+
+# ─── n8n callback endpoint (n8n → chatbot push) ─────────
+
+@router.post("/n8n-callback", response_model=N8nCallbackResponse)
+async def n8n_callback(request: Request):
+    """Receive a message pushed from n8n and queue it for the chat session.
+
+    n8n calls this after assigning a specialist, sending an itinerary, etc.
+    The widget polls /n8n-pending/{session_id} to pick these up.
+    """
+    body = await request.body()
+    signature = request.headers.get("X-Webhook-Signature", "")
+
+    if not _verify_hmac(body, signature):
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
+    from pydantic import ValidationError as PydanticValidationError
+    try:
+        payload = N8nCallbackRequest.model_validate_json(body)
+    except PydanticValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors())
+
+    # Queue the message for the session
+    _n8n_pending.setdefault(payload.session_id, []).append({
+        "message": payload.message,
+        "message_type": payload.message_type,
+        "metadata": payload.metadata or {},
+        "conversation_id": payload.conversation_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+    logger.info(f"n8n callback queued for session {payload.session_id} ({payload.message_type})")
+
+    return N8nCallbackResponse(status="queued", session_id=payload.session_id)
+
+
+@router.get("/n8n-pending/{session_id}")
+async def get_pending_messages(session_id: str):
+    """Drain and return any pending n8n messages for a session.
+
+    Called by the chat widget to pick up async notifications
+    (specialist assigned, itinerary ready, escalation updates, etc.).
+    """
+    messages = _n8n_pending.pop(session_id, [])
+    return {"messages": messages, "count": len(messages)}
 
 
 # ─── Helpers ──────────────────────────────────────────────
