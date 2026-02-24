@@ -34,9 +34,10 @@ if (!$env.POWERBI_PUSH_URL || $env.POWERBI_PUSH_URL.includes('your-workspace')) 
   return []; // Skip if not configured
 }
 
-// Build Power BI row (15 columns)
+// Build Power BI row (16 columns)
 const powerbiRow = {
-  enquiryId: $execution.id || `exec-${Date.now()}`,
+  enquiryCount: 1,
+  enquiryId: Math.abs(Date.now() % 2147483647),
   clientName: payload.clientName || 'Anonymous',
   clientEmail: payload.clientEmail || 'not-provided@example.com',
   destination: payload.destination || 'Not specified',
