@@ -195,8 +195,18 @@ run_tests() {
         fail "Chat endpoint not responding"
     fi
 
-    # 8. Webhook endpoint (CORS preflight)
-    info "Webhook CORS preflight..."
+    # 8. Website serving
+    info "Mahlatini website..."
+    local website_status
+    website_status=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:8080/ 2>/dev/null || echo "000")
+    if [ "$website_status" = "200" ]; then
+        pass "Website: serving on :8080"
+    else
+        fail "Website returned HTTP ${website_status}"
+    fi
+
+    # 9. Webhook endpoint (CORS preflight)
+    info "Webhook CORS preflight (9/10)..."
     local cors_status
     cors_status=$(curl -sf -o /dev/null -w "%{http_code}" -X OPTIONS http://localhost/webhook/website-enquiry \
         -H "Origin: https://www.mahlatini.com" \
@@ -207,7 +217,7 @@ run_tests() {
         fail "Webhook CORS returned HTTP ${cors_status}"
     fi
 
-    # 9. n8n webhook (full pipeline test)
+    # 10. n8n webhook (full pipeline test)
     info "n8n pipeline (website form → Outlook + Claude)..."
     local webhook_resp
     webhook_resp=$(curl -sf -m 30 -X POST http://localhost/webhook/website-enquiry \
@@ -241,6 +251,7 @@ run_tests() {
     fi
     echo ""
     echo -e "  ${BOLD}Endpoints:${NC}"
+    echo "    Website:       http://localhost:8080"
     echo "    Chatbot API:   http://localhost/api/chat/message"
     echo "    WebSocket:     ws://localhost/api/chat/ws/{session_id}"
     echo "    Health:        http://localhost/health"

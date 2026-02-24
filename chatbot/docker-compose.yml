@@ -5,9 +5,11 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "8080:8080"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ../www.mahlatini.com:/var/www/mahlatini:ro
     depends_on:
       api:
         condition: service_healthy
