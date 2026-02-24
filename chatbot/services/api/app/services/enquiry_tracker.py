@@ -30,6 +30,7 @@ REQUIRED_FIELDS = {
     "num_adults",
     "contact_name",
     "contact_email",
+    "contact_phone",
 }
 
 # Human-friendly labels used in the LLM prompt
@@ -78,6 +79,8 @@ def compute_filled_fields(booking: BookingDetails) -> tuple[set, set]:
         filled_req.add("contact_name")
     if booking.contact_email:
         filled_req.add("contact_email")
+    if booking.contact_phone:
+        filled_req.add("contact_phone")
 
     # Optional fields
     if booking.duration_days is not None:
@@ -96,8 +99,6 @@ def compute_filled_fields(booking: BookingDetails) -> tuple[set, set]:
         filled_opt.add("special_requests")
     if booking.special_occasion:
         filled_opt.add("special_occasion")
-    if booking.contact_phone:
-        filled_opt.add("contact_phone")
     if booking.destination_region:
         filled_opt.add("destination_region")
 
@@ -156,8 +157,8 @@ def build_collection_context(state: EnquiryState) -> str:
             f"Already know: {known}\n"
             f"Still need: {missing}\n"
             f"Work ONE of the missing details into your next response naturally. "
-            f"Don't ask for contact details (name/email) until you've collected "
-            f"destination, dates, and group size first."
+            f"Don't ask for contact details (name/email/phone) until you've collected "
+            f"destination, dates, and group size first. Ask about budget (optional) before contact details."
         )
 
     if state.phase == EnquiryPhase.CONFIRMING:
